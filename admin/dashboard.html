@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="/uploads/style.css" />
+</head>
+<body>
+  <section class="admin-page" style="padding-top:0;">
+    <div class="admin-header">
+      <div>
+        <p class="section-label">Admin Dashboard</p>
+        <h2 class="section-title">Management Center</h2>
+        <p class="section-subtitle">View application stats, manage users, and maintain singles and albums from one place.</p>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <button class="btn-ghost" onclick="location.href='/admin/'">Upload Page</button>
+        <button class="btn-ghost" onclick="logout()">Sign Out</button>
+      </div>
+    </div>
+
+    <div class="dashboard-grid" style="margin-bottom:24px;">
+      <div class="dashboard-panel">
+        <h4>Statistics</h4>
+        <div class="dashboard-meta">Users: <strong id="total-users">0</strong></div>
+        <div class="dashboard-meta">Singles: <strong id="total-singles">0</strong></div>
+        <div class="dashboard-meta">Albums: <strong id="total-albums">0</strong></div>
+      </div>
+      <div class="dashboard-panel">
+        <h4>Signed In As</h4>
+        <div class="dashboard-meta"><strong id="admin-user-name">—</strong></div>
+        <div class="dashboard-meta" id="admin-user-role"></div>
+        <button class="btn-primary" style="margin-top:16px;" onclick="refreshDashboard()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="dashboard-panel">
+        <h4>Users</h4>
+        <div id="users-list" class="dashboard-list"></div>
+      </div>
+      <div class="dashboard-panel">
+        <h4>Singles</h4>
+        <div id="singles-list" class="dashboard-list"></div>
+      </div>
+    </div>
+
+    <div class="dashboard-panel" style="margin-top:20px;">
+      <h4>Albums</h4>
+      <div id="albums-list" class="dashboard-list"></div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        credentials: 'include',
+        headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch]));
+    }
+
+    async function loadAuth() {
+      try {
+        const data = await api('/api/auth/me');
+        const user = data.user;
+        if (!user) {
+          window.location.href = '/admin/';
+          return;
+        }
+        document.getElementById('admin-user-name').textContent = user.name;
+        document.getElementById('admin-user-role').textContent = user.role;
+      } catch (error) {
+        window.location.href = '/admin/';
+      }
+    }
+
+    async function refreshDashboard() {
+      try {
+        const data = await api('/api/admin/dashboard');
+        document.getElementById('total-users').textContent = data.stats.totalUsers;
+        document.getElementById('total-singles').textContent = data.stats.totalSingles;
+        document.getElementById('total-albums').textContent = data.stats.totalAlbums;
+
+        document.getElementById('users-list').innerHTML = data.users.map(user => `
+          <div class="dashboard-item">
+            <div>
+              <strong>${escapeHtml(user.name)}</strong>
+              <div class="dashboard-meta">${escapeHtml(user.email)} · ${escapeHtml(user.role)}</div>
+            </div>
+          </div>
+        `).join('');
+
+        document.getElementById('singles-list').innerHTML = data.music.singles.map(single => `
+          <div class="dashboard-item">
+            <div>
+              <strong>${escapeHtml(single.title)}</strong>
+              <div class="dashboard-meta">${escapeHtml(single.genre)} · ${escapeHtml(single.year)} · ${single.audioPath ? 'Downloadable' : 'No download'}</div>
+            </div>
+            <div class="dashboard-actions">
+              <button class="btn-ghost" type="button" onclick="editItem('single', '${single.id}')">Edit</button>
+              <button class="btn-ghost" type="button" onclick="deleteItem('single', '${single.id}')">Delete</button>
+            </div>
+          </div>
+        `).join('');
+
+        document.getElementById('albums-list').innerHTML = data.music.albums.map(album => `
+          <div class="dashboard-item">
+            <div>
+              <strong>${escapeHtml(album.title)}</strong>
+              <div class="dashboard-meta">${escapeHtml(album.genre)} · ${escapeHtml(album.year)} · ${album.tracks.length} tracks</div>
+            </div>
+            <div class="dashboard-actions">
+              <button class="btn-ghost" type="button" onclick="editItem('album', '${album.id}')">Edit</button>
+              <button class="btn-ghost" type="button" onclick="deleteItem('album', '${album.id}')">Delete</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+
+    async function logout() {
+      try {
+        await api('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/admin/';
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+
+    async function deleteItem(type, id) {
+      if (!confirm('Delete this ' + (type === 'single' ? 'single' : 'album') + '?')) return;
+      const path = type === 'single' ? `/api/music/singles/${id}` : `/api/music/albums/${id}`;
+      try {
+        await api(path, { method: 'DELETE' });
+        toast('Deleted successfully');
+        await refreshDashboard();
+      } catch (error) {
+        toast(error.message);
+      }
+    }
+
+    function editItem(type, id) {
+      toast('Edit is available on the upload page for now.');
+    }
+
+    function toast(message) {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.classList.add('show');
+      clearTimeout(el._timeout);
+      el._timeout = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadAuth();
+      await refreshDashboard();
+    });
+  </script>
+</body>
+</html>

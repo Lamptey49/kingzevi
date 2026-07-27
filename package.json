@@ -1,0 +1,17 @@
+{
+  "name": "king-zevi-music-backend",
+  "version": "1.0.0",
+  "description": "KZ Empire music artist page with SQLite-backed authentication and authorization.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.18.3",
+    "multer": "^2.2.0",
+    "sql.js": "^1.13.0"
+  }
+}
