@@ -4,3 +4,4 @@ data/*.db-*
 *.log
 uploads/*
 !uploads/.gitkeep
+package-lock.json

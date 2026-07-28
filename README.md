@@ -1,4 +1,4 @@
-# 🎵 SOLACE — Music Artist Platform
+# 🎵 KingZevi — Music Artist Platform
 
 Full-stack music platform: SQLite persistence, JWT auth, role-based access, and a social fan community.
 
@@ -18,7 +18,7 @@ node server.js
 
 ## Architecture
 ```
-solace/
+kingzevi/
 ├── server.js              Express entry point
 ├── db/database.js         sql.js SQLite + schema + helpers
 ├── middleware/auth.js     JWT sign/verify, requireAuth, requireArtist, optionalAuth
