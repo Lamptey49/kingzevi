@@ -1,0 +1,129 @@
+const initSqlJs = require('sql.js');
+const fs = require('fs');
+const path = require('path');
+
+const DB_PATH = path.join(__dirname, 'solace.db');
+let db = null;
+
+async function getDb() {
+  if (db) return db;
+  const SQL = await initSqlJs();
+  db = fs.existsSync(DB_PATH)
+    ? new SQL.Database(fs.readFileSync(DB_PATH))
+    : new SQL.Database();
+  initSchema();
+  return db;
+}
+
+function save() {
+  if (!db) return;
+  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
+}
+
+function initSchema() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'fan',
+      avatar TEXT DEFAULT '🎧',
+      bio TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS music (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL CHECK(type IN ('single','album')),
+      title TEXT NOT NULL,
+      genre TEXT,
+      year INTEGER,
+      emoji TEXT DEFAULT '🎵',
+      description TEXT,
+      allow_download INTEGER DEFAULT 1,
+      artist_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (artist_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tracks (
+      id TEXT PRIMARY KEY,
+      music_id TEXT NOT NULL,
+      track_number INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      duration TEXT DEFAULT '0:00',
+      filename TEXT,
+      FOREIGN KEY (music_id) REFERENCES music(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS downloads (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      music_id TEXT NOT NULL,
+      downloaded_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS streams (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      track_id TEXT NOT NULL,
+      streamed_at TEXT DEFAULT (datetime('now'))
+    );
+
+    /* ── SOCIAL ── */
+    CREATE TABLE IF NOT EXISTS posts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      content TEXT,
+      image_filename TEXT,
+      image_url TEXT,
+      post_type TEXT NOT NULL DEFAULT 'text' CHECK(post_type IN ('text','image')),
+      like_count INTEGER DEFAULT 0,
+      comment_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS post_likes (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(post_id, user_id),
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+  save();
+}
+
+function all(sql, params = []) {
+  const stmt = db.prepare(sql);
+  const rows = [];
+  stmt.bind(params);
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  return rows;
+}
+
+function get(sql, params = []) {
+  return all(sql, params)[0] || null;
+}
+
+function run(sql, params = []) {
+  db.run(sql, params);
+  save();
+}
+
+module.exports = { getDb, save, all, get, run };
