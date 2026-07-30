@@ -4,7 +4,7 @@
 let me = null;
 let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const BASE = APP_PATH || 'http://localhost:3000';
+const BASE = APP_PATH || 'https://kingzevi.com';
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
