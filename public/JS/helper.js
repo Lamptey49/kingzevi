@@ -14,17 +14,32 @@ let postPage = 1, postPages = 1;
 
 // ── API ──
 async function api(method, path, body, isForm) {
-  const h = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const r = await fetch(BASE+'/api'+path, { method, headers:h, body: body ? (isForm?body:JSON.stringify(body)) : undefined });
-  const text = await r.text();
-  let d = {};
-  try { d = JSON.parse(text); } catch (error) { d = { error: text || 'Invalid response from server' }; }
-  if (!r.ok) {
-    const errMsg = d.error || `Error ${r.status}`;
-    console.error('API error', { method, path, status: r.status, body: d, raw: text });
+  const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
+  const fullPath = '/api' + path;
+  const pageBase = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
+  const fallbackPath = pageBase === '/' ? null : `${pageBase.replace(/\/$/, '')}/api${path}`;
+
+  async function request(url) {
+    console.log('API request', method, url);
+    const res = await fetch(url, { method, headers, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
+    const text = await res.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch (error) { data = { error: text || 'Invalid response from server' }; }
+    return { res, data, text };
+  }
+
+  let result = await request(fullPath);
+  if (!result.res.ok && result.res.status === 404 && fallbackPath) {
+    console.warn('API route not found on root path, retrying with fallback path', { fullPath, fallbackPath });
+    result = await request(fallbackPath);
+  }
+
+  if (!result.res.ok) {
+    const errMsg = result.data.error || `Error ${result.res.status}`;
+    console.error('API error', { method, path, status: result.res.status, body: result.data, raw: result.text });
     throw new Error(errMsg);
   }
-  return d;
+  return result.data;
 }
 
 // ── INIT ──
