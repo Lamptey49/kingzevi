@@ -12,11 +12,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/music', require('./routes/music'));
 app.use('/api/social', require('./routes/social'));
+app.use('/api/admin', require('./routes/admin'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get(['/admin', '/admin/'], (req, res) => res.sendFile(path.join(__dirname, 'admin', 'index.html')));
+app.get('/admin/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'admin', 'dashboard.html')));
 app.get('/{*path}', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 getDb().then(() => {

@@ -13,7 +13,9 @@ function requireAuth(req, res, next) {
 
 function requireArtist(req, res, next) {
   requireAuth(req, res, () => {
-    if (req.user.role !== 'artist') return res.status(403).json({ error: 'Artist access required' });
+    if (!['artist', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Artist or admin access required' });
+    }
     next();
   });
 }

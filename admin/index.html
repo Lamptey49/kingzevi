@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Page</title>
-    <link rel="stylesheet" href="/uploads/style.css" />
+    <link rel="stylesheet" href="/CSS/style.css" />
 </head>
 <body>
     <!-- UPLOAD -->
@@ -249,11 +249,13 @@
   let adminAlbums = [];
   let adminUsers = [];
   let adminStats = { totalUsers: 0, totalSingles: 0, totalAlbums: 0 };
+  let token = localStorage.getItem('st');
 
   async function api(path, options = {}) {
+    const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(path, {
-      credentials: 'include',
-      headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+      headers,
       ...options
     });
     const data = await res.json().catch(() => ({}));
@@ -286,7 +288,7 @@
     if (dashboard) dashboard.style.display = canPublish ? 'block' : 'none';
 
     if (currentUser) {
-      document.getElementById('auth-user-name').textContent = currentUser.name;
+      document.getElementById('auth-user-name').textContent = currentUser.username;
       document.getElementById('auth-user-role').textContent = `(${currentUser.role})`;
     }
   }
@@ -296,13 +298,15 @@
       const data = await api('/api/auth/register', {
         method: 'POST',
         body: JSON.stringify({
-          name: document.getElementById('auth-name').value,
+          username: document.getElementById('auth-name').value,
           email: document.getElementById('auth-email').value,
           password: document.getElementById('auth-password').value,
           role: document.getElementById('auth-role').value
         })
       });
       currentUser = data.user;
+      token = data.token;
+      localStorage.setItem('st', token);
       updateAuthUi();
       alert(`Registered as ${currentUser.role}`);
     } catch (error) {
@@ -320,6 +324,8 @@
         })
       });
       currentUser = data.user;
+      token = data.token;
+      localStorage.setItem('st', token);
       updateAuthUi();
       alert('Signed in');
     } catch (error) {
@@ -331,6 +337,8 @@
     try {
       await api('/api/auth/logout', { method: 'POST' });
       currentUser = null;
+      token = null;
+      localStorage.removeItem('st');
       updateAuthUi();
       alert('Signed out');
     } catch (error) {
@@ -393,17 +401,18 @@
 
     const form = new FormData();
     form.append('title', title);
+    form.append('type', 'single');
     form.append('genre', document.getElementById('s-genre').value || 'Other');
     form.append('year', document.getElementById('s-year').value || '2026');
     form.append('emoji', document.getElementById('s-emoji').value || '🎵');
-    form.append('desc', document.getElementById('s-desc').value);
-    form.append('download', document.getElementById('s-download').checked ? 'true' : 'false');
+    form.append('description', document.getElementById('s-desc').value);
+    form.append('allow_download', document.getElementById('s-download').checked ? 'true' : 'false');
 
     const audio = document.getElementById('s-file').files[0];
     if (audio) form.append('audio', audio);
 
     try {
-      await api('/api/music/singles', { method: 'POST', body: form });
+      await api('/api/music', { method: 'POST', body: form });
       alert(`Single "${title}" uploaded successfully.`);
       document.getElementById('s-title').value = '';
       document.getElementById('s-emoji').value = '';
@@ -424,30 +433,31 @@
       const name = row.querySelector('.track-editor-name').value.trim() || `Track ${index + 1}`;
       const fileInput = row.querySelector('input[type="file"]');
       return {
-        name,
-        dur: '3:00',
-        audioField: fileInput?.files?.[0] ? `trackFile${index}` : null
+        title: name,
+        duration: '3:00',
+        hasAudio: Boolean(fileInput?.files?.[0])
       };
     });
 
     const form = new FormData();
     form.append('title', title);
+    form.append('type', 'album');
     form.append('genre', document.getElementById('a-genre').value || 'Other');
     form.append('year', document.getElementById('a-year').value || '2026');
     form.append('emoji', document.getElementById('a-emoji').value || '💿');
-    form.append('desc', document.getElementById('a-desc').value);
-    form.append('download', document.getElementById('a-download').checked ? 'true' : 'false');
+    form.append('description', document.getElementById('a-desc').value);
+    form.append('allow_download', document.getElementById('a-download').checked ? 'true' : 'false');
     form.append('tracks', JSON.stringify(tracks));
 
     rows.forEach((row, index) => {
       const fileInput = row.querySelector('input[type="file"]');
       if (fileInput?.files?.[0]) {
-        form.append(`trackFile${index}`, fileInput.files[0]);
+        form.append('audio', fileInput.files[0]);
       }
     });
 
     try {
-      await api('/api/music/albums', { method: 'POST', body: form });
+      await api('/api/music', { method: 'POST', body: form });
       alert(`Album "${title}" uploaded successfully.`);
       document.getElementById('a-title').value = '';
       document.getElementById('a-emoji').value = '';
@@ -557,7 +567,7 @@
       desc: document.getElementById('editor-desc-input').value,
       download: document.getElementById('editor-download-input').checked
     };
-    const path = type === 'single' ? `/api/music/singles/${id}` : `/api/music/albums/${id}`;
+    const path = `/api/music/${id}`;
 
     try {
       await api(path, { method: 'PUT', body: JSON.stringify(body) });
@@ -571,7 +581,7 @@
 
   async function deleteAdminItem(type, id) {
     if (!confirm('Delete this ' + (type === 'single' ? 'single' : 'album') + '?')) return;
-    const path = type === 'single' ? `/api/music/singles/${id}` : `/api/music/albums/${id}`;
+    const path = `/api/music/${id}`;
     try {
       await api(path, { method: 'DELETE' });
       await refreshAdmin();

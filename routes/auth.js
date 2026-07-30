@@ -8,7 +8,8 @@ const router = express.Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password, role, avatar } = req.body;
+    const { email, password, role, avatar } = req.body;
+    const username = String(req.body.username || req.body.name || '').trim();
     if (!username || !email || !password) return res.status(400).json({ error: 'Username, email, and password are required' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     if (get('SELECT id FROM users WHERE email = ?', [email])) return res.status(409).json({ error: 'Email already in use' });
@@ -41,6 +42,10 @@ router.get('/me', requireAuth, (req, res) => {
   const user = get('SELECT id,username,email,role,avatar,bio,created_at FROM users WHERE id = ?', [req.user.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
+});
+
+router.post('/logout', (req, res) => {
+  res.json({ success: true });
 });
 
 module.exports = router;

@@ -170,11 +170,16 @@ async function loadMusic() {
 async function loadSocialStats() {
   try {
     const d=await api('GET','/social/stats');
-    document.getElementById('stat-posts').textContent = d.total_posts;
-    document.getElementById('ss-posts').textContent = d.total_posts;
-    document.getElementById('ss-comments').textContent = d.total_comments;
-    document.getElementById('ss-likes').textContent = d.total_likes;
-    document.getElementById('ss-fans').textContent = d.active_fans;
+    const statPosts = document.getElementById('stat-posts');
+    const sidebarPosts = document.getElementById('ss-posts');
+    const sidebarComments = document.getElementById('ss-comments');
+    const sidebarLikes = document.getElementById('ss-likes');
+    const sidebarFans = document.getElementById('ss-fans');
+    if (statPosts) statPosts.textContent = d.total_posts;
+    if (sidebarPosts) sidebarPosts.textContent = d.total_posts;
+    if (sidebarComments) sidebarComments.textContent = d.total_comments;
+    if (sidebarLikes) sidebarLikes.textContent = d.total_likes;
+    if (sidebarFans) sidebarFans.textContent = d.active_fans;
   } catch {}
 }
 
@@ -397,15 +402,18 @@ async function submitPost() {
 
 // ── SOCIAL: FEED ──
 async function loadPosts(page=1) {
+  const feed = document.getElementById('posts-feed');
+  const loadMore = document.getElementById('load-more');
+  if (!feed) return;
   if (page===1) document.getElementById('posts-feed').innerHTML='<div class="loading-state"><div class="spinner"></div>Loading posts…</div>';
   try {
     const d=await api('GET','/social/posts?page='+page+'&limit=10');
     postPage=d.page; postPages=d.pages;
-    if(page===1) document.getElementById('posts-feed').innerHTML='';
+    if(page===1) feed.innerHTML='';
     d.posts.forEach(p=>appendPost(p));
-    document.getElementById('load-more').style.display=postPage<postPages?'block':'none';
-    if(page===1&&d.posts.length===0) document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p class="empty-text">No posts yet. Be the first to share!</p></div>';
-  } catch(e) { document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load posts.</p></div>'; }
+    if (loadMore) loadMore.style.display=postPage<postPages?'block':'none';
+    if(page===1&&d.posts.length===0) feed.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p class="empty-text">No posts yet. Be the first to share!</p></div>';
+  } catch(e) { feed.innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load posts.</p></div>'; }
 }
 async function loadMorePosts() {
   await loadPosts(postPage+1);
@@ -420,7 +428,8 @@ function prependPost(post) {
 }
 function appendPost(post) {
   const el=buildPostEl(post);
-  document.getElementById('posts-feed').appendChild(el);
+  const feed = document.getElementById('posts-feed');
+  if (feed) feed.appendChild(el);
 }
 
 function buildPostEl(post) {

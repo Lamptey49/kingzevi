@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Dashboard</title>
-  <link rel="stylesheet" href="/uploads/style.css" />
+  <link rel="stylesheet" href="/CSS/style.css" />
 </head>
 <body>
   <section class="admin-page" style="padding-top:0;">
@@ -55,10 +55,13 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    let token = localStorage.getItem('st');
+
     async function api(path, options = {}) {
+      const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
       const res = await fetch(path, {
-        credentials: 'include',
-        headers: options.body instanceof FormData ? undefined : { 'Content-Type': 'application/json' },
+        headers,
         ...options
       });
       const data = await res.json().catch(() => ({}));
@@ -84,7 +87,7 @@
           window.location.href = '/admin/';
           return;
         }
-        document.getElementById('admin-user-name').textContent = user.name;
+        document.getElementById('admin-user-name').textContent = user.username;
         document.getElementById('admin-user-role').textContent = user.role;
       } catch (error) {
         window.location.href = '/admin/';
@@ -140,6 +143,8 @@
     async function logout() {
       try {
         await api('/api/auth/logout', { method: 'POST' });
+        token = null;
+        localStorage.removeItem('st');
         window.location.href = '/admin/';
       } catch (error) {
         toast(error.message);
@@ -148,7 +153,7 @@
 
     async function deleteItem(type, id) {
       if (!confirm('Delete this ' + (type === 'single' ? 'single' : 'album') + '?')) return;
-      const path = type === 'single' ? `/api/music/singles/${id}` : `/api/music/albums/${id}`;
+      const path = `/api/music/${id}`;
       try {
         await api(path, { method: 'DELETE' });
         toast('Deleted successfully');
