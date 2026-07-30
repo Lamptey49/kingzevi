@@ -1,6 +1,7 @@
 
 // ── CONFIG ──
-const BASE = window.location.origin;
+const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
+const BASE = new URL((APP_PATH || '/') + '/', window.location.origin).href;
 
 // ── STATE ──
 let me = null, token = localStorage.getItem('st');
@@ -15,9 +16,7 @@ let postPage = 1, postPages = 1;
 // ── API ──
 async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const fullPath = '/api' + path;
-  const pageBase = window.location.pathname.replace(/\/[^/]*$/, '') || '/';
-  const fallbackPath = pageBase === '/' ? null : `${pageBase.replace(/\/$/, '')}/api${path}`;
+  const fullPath = new URL(`api${path.replace(/^\//, '')}`, BASE).href;
 
   async function request(url) {
     console.log('API request', method, url);
@@ -29,10 +28,6 @@ async function api(method, path, body, isForm) {
   }
 
   let result = await request(fullPath);
-  if (!result.res.ok && result.res.status === 404 && fallbackPath) {
-    console.warn('API route not found on root path, retrying with fallback path', { fullPath, fallbackPath });
-    result = await request(fallbackPath);
-  }
 
   if (!result.res.ok) {
     const errMsg = result.data.error || `Error ${result.res.status}`;
