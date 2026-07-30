@@ -4,7 +4,8 @@
 let me = null;
 let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const BASE = window.location.origin;
+const CONFIG = window.__APP_CONFIG__ || {};
+const API_BASE_URL = String(CONFIG.apiBaseUrl || window.API_BASE_URL || '').replace(/\/$/, '');
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
@@ -17,8 +18,8 @@ let postPage = 1, postPages = 1;
 async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
   const normalizedPath = path.replace(/^\//, '');
-  const baseSegment = BASE.replace(/\/$/, '');
-  const candidates = [`${baseSegment}/api/${normalizedPath}`, `/api/${normalizedPath}`];
+  const apiPath = normalizedPath.startsWith('api/') ? normalizedPath : `api/${normalizedPath}`;
+  const url = API_BASE_URL ? `${API_BASE_URL}/${apiPath}` : `/${apiPath}`;
 
   async function request(url) {
     console.log('API request', method, url);
@@ -29,22 +30,10 @@ async function api(method, path, body, isForm) {
     return { res, data, text };
   }
 
-  let lastError = null;
-  for (const apiPath of candidates) {
-    const result = await request(apiPath);
-    if (result.res.ok) return result.data;
-    if (result.res.status === 404) {
-      console.warn('API candidate not found, trying next', apiPath);
-      lastError = result;
-      continue;
-    }
-    const errMsg = result.data.error || `Error ${result.res.status}`;
-    console.error('API error', { method, path, status: result.res.status, body: result.data, raw: result.text });
-    throw new Error(errMsg);
-  }
-
-  const errMsg = lastError?.data?.error || 'API request failed';
-  console.error('All API candidates failed', { method, path, candidates, lastError });
+  const result = await request(url);
+  if (result.res.ok) return result.data;
+  const errMsg = result.data.error || `Error ${result.res.status}`;
+  console.error('API error', { method, path, url, status: result.res.status, body: result.data, raw: result.text });
   throw new Error(errMsg);
 }
 

@@ -6,10 +6,16 @@ const { getDb } = require('./db/database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_BASE_URL = (process.env.API_BASE_URL || '').replace(/\/$/, '');
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.get('/config.js', (req, res) => {
+  res.type('application/javascript').send(
+    `window.__APP_CONFIG__ = ${JSON.stringify({ apiBaseUrl: API_BASE_URL })};`
+  );
+});
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/admin', express.static(path.join(__dirname, 'admin')));

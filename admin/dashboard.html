@@ -54,13 +54,20 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="/config.js"></script>
   <script>
     let token = localStorage.getItem('st');
+    const API_BASE_URL = String((window.__APP_CONFIG__ && window.__APP_CONFIG__.apiBaseUrl) || window.API_BASE_URL || '').replace(/\/$/, '');
+
+    function apiUrl(path) {
+      const normalizedPath = path.replace(/^\//, '');
+      return API_BASE_URL ? `${API_BASE_URL}/${normalizedPath}` : `/${normalizedPath}`;
+    }
 
     async function api(path, options = {}) {
       const headers = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(path, {
+      const res = await fetch(apiUrl(path), {
         headers,
         ...options
       });

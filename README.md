@@ -9,6 +9,15 @@ node server.js
 # → http://localhost:3000
 ```
 
+## Production API URL
+If the frontend is served from a different domain than the Node/Express server, set:
+
+```bash
+API_BASE_URL=https://your-backend-domain.com
+```
+
+The browser will then call `https://your-backend-domain.com/api/...` instead of the frontend host's `/api/...`.
+
 ## Test Accounts
 | Role   | Email                 | Password     |
 |--------|-----------------------|--------------|

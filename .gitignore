@@ -5,3 +5,5 @@ data/*.db-*
 uploads/*
 !uploads/.gitkeep
 package-lock.json
+.env
+.gitignore
