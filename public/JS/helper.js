@@ -1,10 +1,10 @@
 
 // ── CONFIG ──
+// Initialize token early so helper functions can reference it safely.
+let me = null;
+let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
 const BASE = new URL((APP_PATH || '/') + '/', window.location.origin).href;
-
-// ── STATE ──
-let me = null, token = localStorage.getItem('st');
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
