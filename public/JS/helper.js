@@ -16,8 +16,14 @@ let postPage = 1, postPages = 1;
 async function api(method, path, body, isForm) {
   const h = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
   const r = await fetch(BASE+'/api'+path, { method, headers:h, body: body ? (isForm?body:JSON.stringify(body)) : undefined });
-  const d = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(d.error||'Error');
+  const text = await r.text();
+  let d = {};
+  try { d = JSON.parse(text); } catch (error) { d = { error: text || 'Invalid response from server' }; }
+  if (!r.ok) {
+    const errMsg = d.error || `Error ${r.status}`;
+    console.error('API error', { method, path, status: r.status, body: d, raw: text });
+    throw new Error(errMsg);
+  }
   return d;
 }
 
@@ -58,8 +64,16 @@ async function doLogin() {
   clearErr();
   const email=document.getElementById('l-email').value.trim(), pass=document.getElementById('l-pass').value;
   if (!email||!pass) return showErr('Fill in all fields');
-  try { const d=await api('POST','/auth/login',{email,password:pass}); applyUser(d.user,d.token); closeAuth(); updateUI(); toast('Welcome back, '+d.user.username+'! 🎵'); }
-  catch(e) { showErr(e.message); }
+  try {
+    const d=await api('POST','/auth/login',{email,password:pass});
+    applyUser(d.user,d.token);
+    closeAuth();
+    updateUI();
+    toast('Welcome back, '+d.user.username+'! 🎵');
+  } catch(e) {
+    console.error('Login failed', { email, message: e.message });
+    showErr(e.message || 'Login failed. Check console for details.');
+  }
 }
 async function doRegister() {
   clearErr();
@@ -79,22 +93,38 @@ function logout() {
 }
 function updateUI() {
   const loggedIn = !!me;
-  document.getElementById('header-guest').style.display = loggedIn ? 'none' : 'flex';
-  document.getElementById('header-user').style.display = loggedIn ? 'block' : 'none';
+  const headerGuest = document.getElementById('header-guest');
+  const headerUser = document.getElementById('header-user');
+  if (headerGuest) headerGuest.style.display = loggedIn ? 'none' : 'flex';
+  if (headerUser) headerUser.style.display = loggedIn ? 'block' : 'none';
+
   if (me) {
-    document.getElementById('h-avatar').textContent = me.avatar||'🎧';
-    document.getElementById('h-name').textContent = me.username;
+    const avatarEl = document.getElementById('h-avatar');
+    const nameEl = document.getElementById('h-name');
     const roleEl = document.getElementById('h-role');
-    roleEl.textContent = me.role;
-    roleEl.className = 'u-role ' + (me.role==='artist'?'artist':'fan');
-    document.getElementById('composer-av').textContent = me.avatar||'🎧';
+    const composerAvatar = document.getElementById('composer-av');
+    if (avatarEl) avatarEl.textContent = me.avatar||'🎧';
+    if (nameEl) nameEl.textContent = me.username;
+    if (roleEl) {
+      roleEl.textContent = me.role;
+      roleEl.className = 'u-role ' + (me.role==='artist'?'artist':'fan');
+    }
+    if (composerAvatar) composerAvatar.textContent = me.avatar||'🎧';
   }
+
   const isArtist = me && me.role==='artist';
-  document.getElementById('upload-gate').style.display = isArtist ? 'none' : 'block';
-  document.getElementById('upload-panel').style.display = isArtist ? 'block' : 'none';
-  document.getElementById('composer').style.display = loggedIn ? 'block' : 'none';
-  document.getElementById('feed-login-prompt').style.display = loggedIn ? 'none' : 'block';
-  document.getElementById('sidebar-login').style.display = loggedIn ? 'none' : 'block';
+  const uploadGate = document.getElementById('upload-gate');
+  const uploadPanel = document.getElementById('upload-panel');
+  const composer = document.getElementById('composer');
+  const feedLoginPrompt = document.getElementById('feed-login-prompt');
+  const sidebarLogin = document.getElementById('sidebar-login');
+
+  if (uploadGate) uploadGate.style.display = isArtist ? 'none' : 'block';
+  if (uploadPanel) uploadPanel.style.display = isArtist ? 'block' : 'none';
+  if (composer) composer.style.display = loggedIn ? 'block' : 'none';
+  if (feedLoginPrompt) feedLoginPrompt.style.display = loggedIn ? 'none' : 'block';
+  if (sidebarLogin) sidebarLogin.style.display = loggedIn ? 'none' : 'block';
+
   renderSingles(allSingles); renderAlbums(allAlbums);
 }
 
@@ -104,10 +134,16 @@ async function loadMusic() {
     const [s,a] = await Promise.all([api('GET','/music?type=single'), api('GET','/music?type=album')]);
     allSingles=s.music; allAlbums=a.music;
     renderSingles(allSingles); renderAlbums(allAlbums);
-    document.getElementById('stat-tracks').textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
-    document.getElementById('stat-albums').textContent = allAlbums.length;
-    document.getElementById('stat-streams').textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
-  } catch { document.getElementById('singles-grid').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load music. Is the server running?</p></div>'; }
+    const statTracks = document.getElementById('stat-tracks');
+    const statAlbums = document.getElementById('stat-albums');
+    const statStreams = document.getElementById('stat-streams');
+    if (statTracks) statTracks.textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
+    if (statAlbums) statAlbums.textContent = allAlbums.length;
+    if (statStreams) statStreams.textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
+  } catch {
+    const singlesGrid = document.getElementById('singles-grid');
+    if (singlesGrid) singlesGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load music. Is the server running?</p></div>';
+  }
 }
 async function loadSocialStats() {
   try {
@@ -122,6 +158,7 @@ async function loadSocialStats() {
 
 function renderSingles(list) {
   const g=document.getElementById('singles-grid');
+  if (!g) return;
   if (!list||!list.length) { g.innerHTML='<div class="empty-state"><div class="empty-icon">🎵</div><p class="empty-text">No singles yet.</p></div>'; return; }
   g.innerHTML=list.map((s,i)=>`
     <div class="music-card" onclick="playSingle(${i})">
@@ -141,6 +178,7 @@ function renderSingles(list) {
 }
 function renderAlbums(list) {
   const g=document.getElementById('albums-grid');
+  if (!g) return;
   if (!list||!list.length) { g.innerHTML='<div class="empty-state"><div class="empty-icon">💿</div><p class="empty-text">No albums yet.</p></div>'; return; }
   g.innerHTML=list.map((a,i)=>`
     <div class="music-card" onclick="openAlbum(${i})">
@@ -510,14 +548,28 @@ function toast(msg, isErr=false) {
   setTimeout(()=>el.classList.remove('show'),3200);
 }
 
+// ── MOBILE NAV TOGGLE ──
+function toggleMobileNav() {
+  const nav = document.querySelector('.nav-links');
+  if (!nav) return;
+  nav.classList.toggle('mobile-open');
+}
+
+// Close mobile nav when resizing to desktop
+window.addEventListener('resize', ()=>{
+  const nav = document.querySelector('.nav-links');
+  if (!nav) return;
+  if (window.innerWidth > 768 && nav.classList.contains('mobile-open')) nav.classList.remove('mobile-open');
+});
+
 // ── KEYBOARD SHORTCUTS ──
-document.getElementById('l-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
-document.getElementById('r-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doRegister(); });
+// document.getElementById('l-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+// document.getElementById('r-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doRegister(); });
 
 // ── DRAG DROP (audio) ──
-const dz=document.getElementById('s-drop');
-['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
-['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
-dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
+// const dz=document.getElementById('s-drop');
+// ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
+// ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
+// dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
 
 init();
