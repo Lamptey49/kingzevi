@@ -15,11 +15,25 @@ let selectedImageFile = null;
 let postPage = 1, postPages = 1;
 
 // ── API ──
+function buildApiUrl(path) {
+  const base = String(CONFIG.apiBaseUrl || window.API_BASE_URL || '').trim().replace(/\/$/, '');
+  const cleanPath = String(path || '').trim();
+
+  if (!cleanPath) return base ? `${base}/api` : '/api';
+  if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+
+  const withoutLeadingSlash = cleanPath.replace(/^\/+/, '');
+  const withoutApiPrefix = withoutLeadingSlash.replace(/^api\//i, '');
+  const apiPath = `api/${withoutApiPrefix}`;
+
+  if (!base) return `/${apiPath}`;
+  const normalizedBase = base.replace(/\/api\/?$/, '');
+  return `${normalizedBase}/${apiPath}`;
+}
+
 async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const normalizedPath = path.replace(/^\//, '');
-  const apiPath = normalizedPath.startsWith('api/') ? normalizedPath : `api/${normalizedPath}`;
-  const url = API_BASE_URL ? `${API_BASE_URL}/${apiPath}` : `/${apiPath}`;
+  const url = buildApiUrl(path);
 
   async function request(url) {
     console.log('API request', method, url);

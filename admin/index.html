@@ -254,8 +254,19 @@
   const API_BASE_URL = String((window.__APP_CONFIG__ && window.__APP_CONFIG__.apiBaseUrl) || window.API_BASE_URL || '').replace(/\/$/, '');
 
   function apiUrl(path) {
-    const normalizedPath = path.replace(/^\//, '');
-    return API_BASE_URL ? `${API_BASE_URL}/${normalizedPath}` : `/${normalizedPath}`;
+    const base = String((window.__APP_CONFIG__ && window.__APP_CONFIG__.apiBaseUrl) || window.API_BASE_URL || '').trim().replace(/\/$/, '');
+    const cleanPath = String(path || '').trim();
+
+    if (!cleanPath) return base ? `${base}/api` : '/api';
+    if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+
+    const withoutLeadingSlash = cleanPath.replace(/^\/+/, '');
+    const withoutApiPrefix = withoutLeadingSlash.replace(/^api\//i, '');
+    const apiPath = `api/${withoutApiPrefix}`;
+
+    if (!base) return `/${apiPath}`;
+    const normalizedBase = base.replace(/\/api\/?$/, '');
+    return `${normalizedBase}/${apiPath}`;
   }
 
   async function api(path, options = {}) {
