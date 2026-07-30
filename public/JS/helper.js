@@ -4,7 +4,7 @@
 let me = null;
 let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const BASE = APP_PATH || '';
+const BASE = APP_PATH || 'http://localhost:3000';
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
@@ -50,6 +50,7 @@ async function api(method, path, body, isForm) {
   console.error('All API candidates failed', { method, path, candidates, lastError });
   throw new Error(errMsg);
 }
+
 
 // ── INIT ──
 async function init() {
