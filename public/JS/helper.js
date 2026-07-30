@@ -4,7 +4,7 @@
 let me = null;
 let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const BASE = new URL((APP_PATH || '/') + '/', window.location.origin).href;
+const BASE = APP_PATH || '';
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
@@ -16,7 +16,9 @@ let postPage = 1, postPages = 1;
 // ── API ──
 async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const fullPath = new URL(`api${path.replace(/^\//, '')}`, BASE).href;
+  const baseSegment = BASE.replace(/\/$/, '');
+  const normalizedPath = path.replace(/^\//, '');
+  const fullPath = `${baseSegment}/api/${normalizedPath}`.replace(/\/\/+/, '/');
 
   async function request(url) {
     console.log('API request', method, url);
