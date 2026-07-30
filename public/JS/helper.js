@@ -4,7 +4,7 @@
 let me = null;
 let token = localStorage.getItem('st');
 const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const BASE = APP_PATH || 'https://kingzevi.com';
+const BASE = window.location.origin;
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
@@ -18,10 +18,7 @@ async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
   const normalizedPath = path.replace(/^\//, '');
   const baseSegment = BASE.replace(/\/$/, '');
-  const candidates = [];
-  if (baseSegment) candidates.push(`${baseSegment}/api/${normalizedPath}`);
-  candidates.push(`/api/${normalizedPath}`);
-  candidates.push(`api/${normalizedPath}`);
+  const candidates = [`${baseSegment}/api/${normalizedPath}`, `/api/${normalizedPath}`];
 
   async function request(url) {
     console.log('API request', method, url);
