@@ -16,9 +16,11 @@ let postPage = 1, postPages = 1;
 // ── API ──
 async function api(method, path, body, isForm) {
   const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const baseSegment = BASE.replace(/\/$/, '');
   const normalizedPath = path.replace(/^\//, '');
-  const fullPath = `${baseSegment}/api/${normalizedPath}`.replace(/\/\/+/, '/');
+  const apiCandidates = [];
+  if (BASE) apiCandidates.push(`${BASE.replace(/\/$/, '')}/api/${normalizedPath}`);
+  apiCandidates.push(`/api/${normalizedPath}`);
+  apiCandidates.push(`api/${normalizedPath}`);
 
   async function request(url) {
     console.log('API request', method, url);
@@ -29,14 +31,29 @@ async function api(method, path, body, isForm) {
     return { res, data, text };
   }
 
-  let result = await request(fullPath);
-
-  if (!result.res.ok) {
-    const errMsg = result.data.error || `Error ${result.res.status}`;
-    console.error('API error', { method, path, status: result.res.status, body: result.data, raw: result.text });
-    throw new Error(errMsg);
+  let lastError = null;
+  for (const url of apiCandidates) {
+    try {
+      const result = await request(url);
+      if (result.res.ok) return result.data;
+      if (result.res.status === 404) {
+        console.warn('API route not found, trying next candidate', url);
+        lastError = result;
+        continue;
+      }
+      const errMsg = result.data.error || `Error ${result.res.status}`;
+      console.error('API error', { method, path, status: result.res.status, body: result.data, raw: result.text });
+      throw new Error(errMsg);
+    } catch (error) {
+      if (error.name === 'TypeError') {
+        console.warn('Network or URL error for API request', { method, path, url, error });
+      }
+      lastError = { res: { ok: false, status: 0 }, data: { error: error.message }, text: '' };
+    }
   }
-  return result.data;
+
+  const errMsg = lastError?.data?.error || 'API request failed';
+  throw new Error(errMsg);
 }
 
 // ── INIT ──
