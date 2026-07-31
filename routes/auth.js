@@ -65,6 +65,9 @@ router.put('/profile', requireAuth, upload.single('avatar'), async (req, res) =>
     if (existingUser) return res.status(409).json({ error: 'Email or username is already taken' });
 
     let avatar = user.avatar;
+    if (req.body && req.body.avatar) {
+      avatar = req.body.avatar;
+    }
     if (req.file) {
       const uploadsDir = path.join(__dirname, '..', 'uploads', 'avatars');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });

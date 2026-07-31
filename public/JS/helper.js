@@ -19,7 +19,7 @@ function buildApiUrl(path) {
   const base = String(CONFIG.apiBaseUrl || window.API_BASE_URL || '').trim().replace(/\/$/, '');
   const cleanPath = String(path || '').trim();
 
-  if (!cleanPath) return base ? `${base}/api` : '/api';
+  if (!cleanPath) return '/api';
   if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
 
   const withoutLeadingSlash = cleanPath.replace(/^\/+/, '');

@@ -4,7 +4,7 @@ let fanUser = null;
 function buildApiUrl(path) {
   const base = String(window.__APP_CONFIG__?.apiBaseUrl || window.API_BASE_URL || '').replace(/\/$/, '');
   const clean = String(path || '').replace(/^\/+/, '');
-  if (!base) return `/${clean}`;
+  if (!base) return `/api/${clean}`;
   return `${base}/${clean}`;
 }
 
@@ -46,9 +46,19 @@ function toggleMobileNav() {
   nav.classList.toggle('mobile-open');
 }
 
+function renderAvatar(value, element) {
+  if (!element) return;
+  const safeValue = value || '🎧';
+  if (safeValue.startsWith('data:') || safeValue.startsWith('http') || safeValue.startsWith('/')) {
+    element.innerHTML = `<img src="${safeValue}" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />`;
+    return;
+  }
+  element.textContent = safeValue;
+}
+
 function applyUserToPage(user) {
   fanUser = user;
-  document.getElementById('fan-avatar-preview').textContent = user.avatar || '🎧';
+  renderAvatar(user.avatar, document.getElementById('fan-avatar-preview'));
   document.getElementById('fan-card-name').textContent = user.username || 'Your profile';
   document.getElementById('fan-card-role').textContent = user.role === 'artist' ? 'Artist' : 'Fan';
   document.getElementById('fan-card-email').textContent = user.email || '—';
@@ -78,6 +88,15 @@ async function loadProfile() {
   }
 }
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read the selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function saveProfile() {
   const username = document.getElementById('profile-username').value.trim();
   const email = document.getElementById('profile-email').value.trim();
@@ -102,26 +121,27 @@ async function saveProfile() {
   }
 
   try {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('email', email);
-    formData.append('bio', bio);
-    if (currentPassword) formData.append('currentPassword', currentPassword);
-    if (newPassword) formData.append('newPassword', newPassword);
+    const payload = { username, email, bio };
+    if (currentPassword) payload.currentPassword = currentPassword;
+    if (newPassword) payload.newPassword = newPassword;
 
     const avatarFile = document.getElementById('profile-avatar').files[0];
-    if (avatarFile) formData.append('avatar', avatarFile);
+    if (avatarFile) {
+      payload.avatar = await readFileAsDataUrl(avatarFile);
+    }
 
     const data = await api('/auth/profile', {
       method: 'PUT',
-      body: formData
+      body: payload
     });
 
     if (data.user) {
       fanUser = data.user;
       applyUserToPage(data.user);
-      localStorage.setItem('st', data.token || fanToken);
-      fanToken = data.token || fanToken;
+      if (data.token) {
+        localStorage.setItem('st', data.token);
+        fanToken = data.token;
+      }
       setStatus('Profile updated successfully.');
       showToast('Profile updated successfully.');
     }
