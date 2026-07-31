@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-import { v4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 const path = require('path');
 const { getDb, get, run, all } = require('../../db/database');
 
@@ -191,11 +191,11 @@ async function handleMusic(event, route) {
     const type = body.type || 'single';
     const title = String(body.title || '').trim();
     if (!title || !user) return jsonResponse(400, { error: 'Title and authentication are required' });
-    const id = uuid();
+    const id = uuidv4();
     run('INSERT INTO music (id,type,title,genre,year,emoji,description,allow_download,artist_id) VALUES (?,?,?,?,?,?,?,?,?)', [id, type, title, body.genre || '', body.year || new Date().getFullYear(), body.emoji || (type === 'album' ? '💿' : '🎵'), body.description || '', isTruthy(body.allow_download) ? 1 : 0, user.id]);
     if (type === 'album') {
       const tracks = body.tracks ? JSON.parse(body.tracks) : [];
-      tracks.forEach((track, index) => run('INSERT INTO tracks (id,music_id,track_number,title,duration,filename) VALUES (?,?,?,?,?,?)', [uuid(), id, index + 1, track.title || `Track ${index + 1}`, track.duration || '3:00', null]));
+      tracks.forEach((track, index) => run('INSERT INTO tracks (id,music_id,track_number,title,duration,filename) VALUES (?,?,?,?,?,?)', [uuidv4(), id, index + 1, track.title || `Track ${index + 1}`, track.duration || '3:00', null]));
     }
     const item = get('SELECT * FROM music WHERE id = ?', [id]);
     const tracks = all('SELECT * FROM tracks WHERE music_id = ? ORDER BY track_number ASC', [id]);
@@ -205,13 +205,13 @@ async function handleMusic(event, route) {
   if (route.startsWith('/') && event.httpMethod === 'POST' && route.includes('/download/')) {
     const id = route.split('/download/').pop();
     if (!user) return jsonResponse(401, { error: 'Authentication required' });
-    run('INSERT INTO downloads (id,user_id,music_id) VALUES (?,?,?)', [uuid(), user.id, id]);
+    run('INSERT INTO downloads (id,user_id,music_id) VALUES (?,?,?)', [uuidv4(), user.id, id]);
     return jsonResponse(200, { success: true });
   }
 
   if (route.startsWith('/') && event.httpMethod === 'POST' && route.includes('/stream/')) {
     const id = route.split('/stream/').pop();
-    run('INSERT INTO streams (id,user_id,track_id) VALUES (?,?,?)', [uuid(), user ? user.id : null, id]);
+    run('INSERT INTO streams (id,user_id,track_id) VALUES (?,?,?)', [uuidv4(), user ? user.id : null, id]);
     return jsonResponse(200, { success: true });
   }
 
@@ -260,7 +260,7 @@ async function handleSocial(event, route) {
   if (route === '/posts' && event.httpMethod === 'POST') {
     if (!user) return jsonResponse(401, { error: 'Authentication required' });
     const content = String(body.content || '').trim();
-    const id = uuid();
+    const id = uuidv4();
     run('INSERT INTO posts (id,user_id,content,image_filename,image_url,post_type,like_count,comment_count) VALUES (?,?,?,?,?,?,?,?)', [id, user.id, content, null, null, 'text', 0, 0]);
     const post = get('SELECT * FROM posts WHERE id = ?', [id]);
     return jsonResponse(201, { post: { ...post, avatar: user.avatar || '🎧', username: user.username, role: user.role, liked_by_me: false, like_count: 0, comment_count: 0 } });
@@ -273,7 +273,7 @@ async function handleSocial(event, route) {
     if (existing) {
       run('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?', [postId, user.id]);
     } else {
-      run('INSERT INTO post_likes (id,post_id,user_id) VALUES (?,?,?)', [uuid(), postId, user.id]);
+      run('INSERT INTO post_likes (id,post_id,user_id) VALUES (?,?,?)', [uuidv4(), postId, user.id]);
     }
     const likeCount = get('SELECT COUNT(*) as count FROM post_likes WHERE post_id = ?', [postId])?.count || 0;
     return jsonResponse(200, { liked: !existing, like_count: likeCount });
@@ -296,7 +296,7 @@ async function handleSocial(event, route) {
     const postId = route.split('/')[2];
     const content = String(body.content || '').trim();
     if (!content) return jsonResponse(400, { error: 'Comment content is required' });
-    const id = uuid();
+    const id = uuidv4();
     run('INSERT INTO comments (id,post_id,user_id,content) VALUES (?,?,?,?)', [id, postId, user.id, content]);
     const comment = get('SELECT * FROM comments WHERE id = ?', [id]);
     return jsonResponse(201, { comment: { ...comment, avatar: user.avatar || '🎧', username: user.username, role: user.role } });
