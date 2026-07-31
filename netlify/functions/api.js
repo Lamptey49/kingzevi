@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuid } = require('uuid');
+
 const path = require('path');
 const { getDb, get, run, all } = require('../../db/database');
 
@@ -81,6 +81,7 @@ async function handleAuth(event, route) {
   await ensureDb();
   const body = parseBody(event);
 
+  const { v4: uuid } = require('uuid');
   if (route === '/register' && event.httpMethod === 'POST') {
     const username = String(body.username || body.name || '').trim();
     const email = String(body.email || '').trim();
