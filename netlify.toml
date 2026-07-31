@@ -1,8 +1,43 @@
-[build]
-  publish = "public"
-  functions = "netlify/functions"
+# ─────────────────────────────────────────────────────────────
+#  SOLACE — Netlify configuration
+#
+#  How this works:
+#    Netlify serves public/index.html as the static frontend.
+#    Every /api/* request is PROXIED (status=200, force=true)
+#    to your Render backend — the browser never sees a redirect,
+#    CORS is never an issue, and the frontend needs zero changes.
+#
+#  IMPORTANT: replace the `to` URL below with your actual
+#  Render service URL after you deploy the backend.
+# ─────────────────────────────────────────────────────────────
 
+[build]
+  # Folder Netlify will publish (your frontend lives here)
+  publish = "public"
+
+  # No build command needed — index.html is already built
+  command = ""
+
+# ── API proxy ──────────────────────────────────────────────────
+# All /api/* calls are forwarded to your backend on Render.
+# Change the `to` value to your Render URL (keep /:splat).
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  from   = "/api/*"
+  to     = "https://YOUR-APP-NAME.onrender.com/api/:splat"
+  status = 200        # 200 = proxy (invisible to browser)
+  force  = true       # override any matching static file
+
+# ── Uploaded media proxy ───────────────────────────────────────
+# If fans upload images, Netlify proxies /uploads/* too.
+[[redirects]]
+  from   = "/uploads/*"
+  to     = "https://YOUR-APP-NAME.onrender.com/uploads/:splat"
+  status = 200
+  force  = true
+
+# ── SPA fallback ───────────────────────────────────────────────
+# Any route not matched above (e.g. /community) returns index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
   status = 200

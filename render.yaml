@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────
+#  SOLACE — Render deployment blueprint
+#
+#  Drop this file in your repo root and Render auto-detects it.
+#  Or connect your GitHub repo at https://render.com/new
+#  and Render will use these settings automatically.
+# ─────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: solace-backend
+    runtime: node
+    plan: free                   # free tier — spins down after 15 min idle
+    region: oregon               # closest to most users; change if needed
+
+    # Where your Node.js source lives (repo root)
+    rootDir: .
+
+    # Install deps then start the server
+    buildCommand: npm install
+    startCommand: node server.js
+
+    # Render sets PORT automatically; your server.js already reads it
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true      # Render generates a secure random value
+      # SQLite DB path — Render provides a persistent disk (see below)
+      - key: DB_PATH
+        value: /data/solace.db
+
+    # Persistent disk so SQLite survives redeploys and restarts
+    disk:
+      name: solace-data
+      mountPath: /data
+      sizeGB: 1                  # 1 GB is plenty for SQLite

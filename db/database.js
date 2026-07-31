@@ -2,13 +2,10 @@ const initSqlJs = require('sql.js');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'solace.db');
+// In production (Render) DB_PATH points to the persistent disk at /data/solace.db
+// Locally it falls back to the project directory
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'solace.db');
 let db = null;
-
-const wasmPath = path.join(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm');
-if (fs.existsSync(wasmPath)) {
-  // Bundler will now detect and include this file
-}
 
 async function getDb() {
   if (db) return db;

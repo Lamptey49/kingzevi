@@ -72,56 +72,10 @@ router.post('/', requireArtist, upload.array('audio', 20), (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/:id', requireArtist, (req, res) => {
-  try {
-    const m = get('SELECT * FROM music WHERE id=?', [req.params.id]);
-    if (!m) return res.status(404).json({ error: 'Not found' });
-    if (req.user.role !== 'admin' && m.artist_id !== req.user.id) {
-      return res.status(403).json({ error: 'Not your music' });
-    }
-
-    const {
-      title,
-      genre,
-      year,
-      emoji
-    } = req.body;
-    const description = req.body.description ?? req.body.desc;
-    const allowDownload = req.body.allow_download ?? req.body.download;
-
-    run(
-      `UPDATE music
-       SET title=?,
-           genre=?,
-           year=?,
-           emoji=?,
-           description=?,
-           allow_download=?
-       WHERE id=?`,
-      [
-        title || m.title,
-        genre || m.genre,
-        year ? parseInt(year) : m.year,
-        emoji || m.emoji,
-        description ?? m.description,
-        allowDownload === undefined ? m.allow_download : allowDownload === true || allowDownload === 'true' ? 1 : 0,
-        req.params.id
-      ]
-    );
-
-    const updated = get('SELECT m.*,u.username as artist_name FROM music m JOIN users u ON u.id=m.artist_id WHERE m.id=?', [req.params.id]);
-    updated.tracks = all('SELECT * FROM tracks WHERE music_id=? ORDER BY track_number', [req.params.id]);
-    updated.allow_download = !!updated.allow_download;
-    res.json({ music: updated });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 router.delete('/:id', requireArtist, (req, res) => {
   const m = get('SELECT * FROM music WHERE id=?',[req.params.id]);
   if (!m) return res.status(404).json({ error: 'Not found' });
-  if (req.user.role !== 'admin' && m.artist_id !== req.user.id) return res.status(403).json({ error: 'Not your music' });
+  if (m.artist_id !== req.user.id) return res.status(403).json({ error: 'Not your music' });
   run('DELETE FROM tracks WHERE music_id=?',[req.params.id]);
   run('DELETE FROM music WHERE id=?',[req.params.id]);
   res.json({ success: true });

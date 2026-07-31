@@ -1,9 +1,21 @@
+# Dependencies
 node_modules/
-data/*.db
-data/*.db-*
-*.log
-uploads/*
-!uploads/.gitkeep
-package-lock.json
+
+# Environment secrets — NEVER commit
 .env
-.gitignore
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Uploaded files (audio, images)
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
