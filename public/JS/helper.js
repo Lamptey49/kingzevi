@@ -36,7 +36,7 @@ async function api(method, path, body, isForm) {
   const url = buildApiUrl(path);
 
   async function request(url) {
-    console.log('API request', method, url);
+   
     const res = await fetch(url, { method, headers, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
     const text = await res.text();
     let data = {};
