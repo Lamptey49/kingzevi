@@ -27,6 +27,7 @@ app.use('/api/admin', require('./routes/admin'));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get(['/admin', '/admin/'], (req, res) => res.sendFile(path.join(__dirname, 'admin', 'index.html')));
 app.get('/admin/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'admin', 'dashboard.html')));
+app.get(['/fan-dashboard', '/fan-dashboard/'], (req, res) => res.sendFile(path.join(__dirname, 'public', 'fan-dashboard.html')));
 app.get('/{*path}', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 getDb().then(() => {

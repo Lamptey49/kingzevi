@@ -7,50 +7,100 @@
   <link rel="stylesheet" href="/CSS/style.css" />
 </head>
 <body>
-  <section class="admin-page" style="padding-top:0;">
-    <div class="admin-header">
-      <div>
-        <p class="section-label">Admin Dashboard</p>
-        <h2 class="section-title">Management Center</h2>
-        <p class="section-subtitle">View application stats, manage users, and maintain singles and albums from one place.</p>
+  <div class="admin-dashboard-shell">
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar-brand">
+        <div class="brand-mark">KZ</div>
+        <div>
+          <p class="section-label">Artist Suite</p>
+          <h1>King Zevi</h1>
+        </div>
       </div>
-      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <button class="btn-ghost" onclick="location.href='/admin/'">Upload Page</button>
-        <button class="btn-ghost" onclick="logout()">Sign Out</button>
-      </div>
-    </div>
 
-    <div class="dashboard-grid" style="margin-bottom:24px;">
-      <div class="dashboard-panel">
-        <h4>Statistics</h4>
-        <div class="dashboard-meta">Users: <strong id="total-users">0</strong></div>
-        <div class="dashboard-meta">Singles: <strong id="total-singles">0</strong></div>
-        <div class="dashboard-meta">Albums: <strong id="total-albums">0</strong></div>
-      </div>
-      <div class="dashboard-panel">
-        <h4>Signed In As</h4>
-        <div class="dashboard-meta"><strong id="admin-user-name">—</strong></div>
-        <div class="dashboard-meta" id="admin-user-role"></div>
-        <button class="btn-primary" style="margin-top:16px;" onclick="refreshDashboard()">Refresh</button>
-      </div>
-    </div>
+      <nav class="admin-nav" aria-label="Dashboard sections">
+        <a class="admin-nav-link active" href="#overview">Overview</a>
+        <a class="admin-nav-link" href="#users-section">Users</a>
+        <a class="admin-nav-link" href="#singles-section">Singles</a>
+        <a class="admin-nav-link" href="#albums-section">Albums</a>
+      </nav>
 
-    <div class="dashboard-grid">
-      <div class="dashboard-panel">
-        <h4>Users</h4>
-        <div id="users-list" class="dashboard-list"></div>
+      <div class="admin-sidebar-card">
+        <p class="section-label">Signed in as</p>
+        <div class="admin-user-pill">
+          <span class="admin-user-avatar">A</span>
+          <div>
+            <strong id="admin-user-name">—</strong>
+            <div class="admin-user-role" id="admin-user-role"></div>
+          </div>
+        </div>
+        <div class="admin-sidebar-actions">
+          <button class="btn-primary" onclick="refreshDashboard()">Refresh</button>
+          <button class="btn-ghost" onclick="location.href='/admin/'">Upload</button>
+          <button class="btn-ghost" onclick="logout()">Sign out</button>
+        </div>
       </div>
-      <div class="dashboard-panel">
-        <h4>Singles</h4>
-        <div id="singles-list" class="dashboard-list"></div>
-      </div>
-    </div>
+    </aside>
 
-    <div class="dashboard-panel" style="margin-top:20px;">
-      <h4>Albums</h4>
-      <div id="albums-list" class="dashboard-list"></div>
-    </div>
-  </section>
+    <main class="admin-main">
+      <section id="overview" class="admin-panel admin-panel-hero">
+        <div class="admin-panel-top">
+          <div>
+            <p class="section-label">Admin Dashboard</p>
+            <h2 class="section-title">Management Center</h2>
+            <p class="section-subtitle">Review stats, manage accounts, and keep your catalog organized from one place.</p>
+          </div>
+          <button class="btn-ghost" onclick="refreshDashboard()">Refresh</button>
+        </div>
+
+        <div class="admin-stat-grid">
+          <div class="admin-metric-card">
+            <span class="admin-metric-label">Users</span>
+            <strong id="total-users">0</strong>
+          </div>
+          <div class="admin-metric-card">
+            <span class="admin-metric-label">Singles</span>
+            <strong id="total-singles">0</strong>
+          </div>
+          <div class="admin-metric-card">
+            <span class="admin-metric-label">Albums</span>
+            <strong id="total-albums">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-grid">
+        <article id="users-section" class="admin-panel">
+          <div class="admin-panel-header">
+            <div>
+              <p class="section-label">People</p>
+              <h3>Users</h3>
+            </div>
+          </div>
+          <div id="users-list" class="dashboard-list"></div>
+        </article>
+
+        <article id="singles-section" class="admin-panel">
+          <div class="admin-panel-header">
+            <div>
+              <p class="section-label">Catalog</p>
+              <h3>Singles</h3>
+            </div>
+          </div>
+          <div id="singles-list" class="dashboard-list"></div>
+        </article>
+      </section>
+
+      <section id="albums-section" class="admin-panel admin-panel-wide">
+        <div class="admin-panel-header">
+          <div>
+            <p class="section-label">Catalog</p>
+            <h3>Albums</h3>
+          </div>
+        </div>
+        <div id="albums-list" class="dashboard-list"></div>
+      </section>
+    </main>
+  </div>
 
   <div class="toast" id="toast"></div>
 
@@ -101,6 +151,16 @@
       }
     }
 
+    function renderList(containerId, items, renderItem, emptyText) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      if (!items || !items.length) {
+        container.innerHTML = `<div class="dashboard-empty">${emptyText}</div>`;
+        return;
+      }
+      container.innerHTML = items.map(renderItem).join('');
+    }
+
     async function refreshDashboard() {
       try {
         const data = await api('/api/admin/dashboard');
@@ -108,16 +168,16 @@
         document.getElementById('total-singles').textContent = data.stats.totalSingles;
         document.getElementById('total-albums').textContent = data.stats.totalAlbums;
 
-        document.getElementById('users-list').innerHTML = data.users.map(user => `
+        renderList('users-list', data.users || [], user => `
           <div class="dashboard-item">
             <div>
               <strong>${escapeHtml(user.name)}</strong>
               <div class="dashboard-meta">${escapeHtml(user.email)} · ${escapeHtml(user.role)}</div>
             </div>
           </div>
-        `).join('');
+        `, 'No users yet.');
 
-        document.getElementById('singles-list').innerHTML = data.music.singles.map(single => `
+        renderList('singles-list', data.music?.singles || [], single => `
           <div class="dashboard-item">
             <div>
               <strong>${escapeHtml(single.title)}</strong>
@@ -128,20 +188,20 @@
               <button class="btn-ghost" type="button" onclick="deleteItem('single', '${single.id}')">Delete</button>
             </div>
           </div>
-        `).join('');
+        `, 'No singles added yet.');
 
-        document.getElementById('albums-list').innerHTML = data.music.albums.map(album => `
+        renderList('albums-list', data.music?.albums || [], album => `
           <div class="dashboard-item">
             <div>
               <strong>${escapeHtml(album.title)}</strong>
-              <div class="dashboard-meta">${escapeHtml(album.genre)} · ${escapeHtml(album.year)} · ${album.tracks.length} tracks</div>
+              <div class="dashboard-meta">${escapeHtml(album.genre)} · ${escapeHtml(album.year)} · ${album.tracks?.length || 0} tracks</div>
             </div>
             <div class="dashboard-actions">
               <button class="btn-ghost" type="button" onclick="editItem('album', '${album.id}')">Edit</button>
               <button class="btn-ghost" type="button" onclick="deleteItem('album', '${album.id}')">Delete</button>
             </div>
           </div>
-        `).join('');
+        `, 'No albums added yet.');
       } catch (error) {
         toast(error.message);
       }
