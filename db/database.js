@@ -5,6 +5,11 @@ const path = require('path');
 const DB_PATH = path.join(__dirname, 'solace.db');
 let db = null;
 
+const wasmPath = path.join(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm');
+if (fs.existsSync(wasmPath)) {
+  // Bundler will now detect and include this file
+}
+
 async function getDb() {
   if (db) return db;
   const SQL = await initSqlJs();
