@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuid } = require('uuid');
+import { v4 } from 'uuid';
 const path = require('path');
 const { getDb, get, run, all } = require('../../db/database');
 
