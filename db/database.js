@@ -1,4 +1,4 @@
-import initSqlJs from 'sql.js';
+import initSqlJs from 'sql.js/dist/sql-asm.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -15,7 +15,7 @@ let db = null;
 export async function getDb() {
   if (db) return db;
 
-  const SQL = await initSqlJs();
+  const SQL = await initSqlJs({ locateFile: file => path.join(__dirname, '../node_modules/sql.js/dist/', file) });
 
   // Ensure the parent directory exists (critical on first boot in prod
   // where /data is a freshly mounted empty disk)
@@ -29,7 +29,7 @@ export async function getDb() {
     ? new SQL.Database(fs.readFileSync(DB_PATH))
     : new SQL.Database();
 
-  console.log(`🗄️  Database: ${fs.existsSync(DB_PATH) ? 'loaded existing' : 'created new'} → ${DB_PATH}`);
+  console.log(` Database: ${fs.existsSync(DB_PATH) ? 'loaded existing' : 'created new'} → ${DB_PATH}`);
 
   initSchema();
   return db;
