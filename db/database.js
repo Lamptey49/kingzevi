@@ -1,17 +1,17 @@
-const initSqlJs = require('sql.js');
-const fs = require('fs');
-const path = require('path');
+import initSqlJs from 'sql.js';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 // In production (Render) DB_PATH points to the persistent disk at /data/solace.db
 // Locally it falls back to the project directory
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'solace.db');
+const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'solace.db');
 let db = null;
 
 async function getDb() {
   if (db) return db;
   const SQL = await initSqlJs();
-  db = fs.existsSync(DB_PATH)
-    ? new SQL.Database(fs.readFileSync(DB_PATH))
+  db = existsSync(DB_PATH)
+    ? new SQL.Database(readFileSync(DB_PATH))
     : new SQL.Database();
   initSchema();
   return db;
@@ -19,7 +19,7 @@ async function getDb() {
 
 function save() {
   if (!db) return;
-  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
+  writeFileSync(DB_PATH, Buffer.from(db.export()));
 }
 
 function initSchema() {
@@ -128,4 +128,4 @@ function run(sql, params = []) {
   save();
 }
 
-module.exports = { getDb, save, all, get, run };
+export default { getDb, save, all, get, run };

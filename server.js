@@ -1,8 +1,8 @@
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const { getDb } = require('./db/database');
+import express, { json, urlencoded, static } from 'express';
+import cors from 'cors';
+import { join } from 'path';
+import { getDb } from './db/database';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,16 +25,16 @@ app.use(cors(corsOptions));
 app.options('/{*path}', cors(corsOptions)); // preflight
 
 // ── BODY PARSING ──────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(json({ limit: '10mb' }));
+app.use(urlencoded({ extended: true, limit: '10mb' }));
 
 // ── STATIC FILES ──────────────────────────────────────────────
 // On Render the backend also serves uploads (audio, social images).
 // The frontend (HTML) is served by Netlify — not needed here in prod,
 // but kept so the app still works when running locally.
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', static(join(__dirname, 'uploads')));
 if (!isProd) {
-  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(static(join(__dirname, 'public')));
 }
 
 // ── API ROUTES ────────────────────────────────────────────────
@@ -49,7 +49,7 @@ app.get('/api/health', (req, res) =>
 // ── SPA FALLBACK (local dev only) ────────────────────────────
 if (!isProd) {
   app.get('/{*path}', (req, res) =>
-    res.sendFile(path.join(__dirname, 'public', 'index.html'))
+    res.sendFile(join(__dirname, 'public', 'index.html'))
   );
 }
 

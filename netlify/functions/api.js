@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path'
-const { getDb, get, run, all } = require('../../db/database');
+const { getDb, get, run, all } = require('../../db/database').default;
 
 const SECRET = process.env.JWT_SECRET || 'solace_secret_2026';
 let dbReady = null;
