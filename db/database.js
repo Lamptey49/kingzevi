@@ -6,11 +6,36 @@ import { fileURLToPath } from 'url';
 // ES modules don't have __dirname — derive it from import.meta.url
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Production: prefer an explicit DB_PATH if provided.
-// Vercel/serverless environments do not guarantee /data exists, so fall back to a writable temp path.
-const DB_PATH = process.env.DB_PATH ?? process.env.NODE_ENV === 'production'
-  ? path.join('/tmp', 'solace.db')
-  : path.join(__dirname, '..', 'solace.db');
+function resolveDbPath() {
+  const configuredPath = process.env.DB_PATH?.trim();
+  if (configuredPath) return path.resolve(configuredPath);
+
+  if (process.env.NODE_ENV === 'production') {
+    return '/data/solace.db';
+  }
+
+  return path.join(__dirname, '..', 'data', 'solace.db');
+}
+
+function migrateLegacyDatabase(targetPath) {
+  const legacyPaths = [
+    path.join(__dirname, '..', 'solace.db'),
+    path.join('/tmp', 'solace.db'),
+  ].filter(candidate => candidate && candidate !== targetPath && fs.existsSync(candidate));
+
+  if (!legacyPaths.length || fs.existsSync(targetPath)) return;
+
+  const sourcePath = legacyPaths[0];
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  fs.copyFileSync(sourcePath, targetPath);
+  console.log(`📦 Migrated database from ${sourcePath} → ${targetPath}`);
+}
+
+const DB_PATH = resolveDbPath();
 
 let db = null;
 
@@ -27,6 +52,8 @@ export async function getDb() {
     console.log(`📁 Created database directory: ${dir}`);
   }
 
+  migrateLegacyDatabase(DB_PATH);
+
   db = fs.existsSync(DB_PATH)
     ? new SQL.Database(fs.readFileSync(DB_PATH))
     : new SQL.Database();
@@ -39,6 +66,10 @@ export async function getDb() {
 
 export function save() {
   if (!db) return;
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
   fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
 }
 
