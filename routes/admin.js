@@ -1,8 +1,8 @@
-const express = require('express');
-const { all } = require('../db/database');
-const { requireArtist } = require('../middleware/auth');
+import { Router } from 'express';
+import { all } from '../db/database';
+import { requireArtist } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
 function toMusicItem(row, tracks = []) {
   return {
@@ -67,4 +67,4 @@ router.get('/dashboard', requireArtist, (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

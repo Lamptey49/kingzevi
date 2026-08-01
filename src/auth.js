@@ -1,12 +1,12 @@
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
-const { get, run } = require('./db');
+import { createHash, randomBytes } from 'crypto';
+import { hash, compare } from 'bcryptjs';
+import { get, run } from './db';
 
 const COOKIE_NAME = 'solace_session';
 const DEFAULT_SESSION_DAYS = Number(process.env.SESSION_DAYS || 7);
 
 function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex');
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function publicUser(user) {
@@ -37,7 +37,7 @@ function clearSessionCookie(res) {
 }
 
 async function createSession(res, userId) {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + DEFAULT_SESSION_DAYS * 24 * 60 * 60 * 1000);
 
   await run(
@@ -108,7 +108,7 @@ async function registerUser({ name, email, password, requestedRole }) {
 
   const userCount = await get('SELECT COUNT(*) AS count FROM users');
   const role = userCount.count === 0 ? 'admin' : requestedRole === 'artist' ? 'artist' : 'fan';
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await hash(password, 12);
 
   const result = await run(
     'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
@@ -124,7 +124,7 @@ async function authenticateUser({ email, password }) {
 
   if (!user) throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
 
-  const valid = await bcrypt.compare(String(password || ''), user.password_hash);
+  const valid = await compare(String(password || ''), user.password_hash);
   if (!valid) throw Object.assign(new Error('Invalid email or password.'), { status: 401 });
 
   return publicUser(user);
@@ -136,7 +136,7 @@ async function logout(req, res) {
   clearSessionCookie(res);
 }
 
-module.exports = {
+export default {
   authenticateUser,
   createSession,
   currentUser,

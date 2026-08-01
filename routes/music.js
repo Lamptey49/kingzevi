@@ -1,19 +1,19 @@
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuid } = require('uuid');
-const { all, get, run } = require('../db/database');
-const { requireAuth, requireArtist, optionalAuth } = require('../middleware/auth');
+import { Router } from 'express';
+import multer, { diskStorage } from 'multer';
+import { join, extname } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { v4 as uuid } from 'uuid';
+import { all, get, run } from '../db/database';
+import { requireAuth, requireArtist, optionalAuth } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
-const audioStorage = multer.diskStorage({
-  destination: (req, file, cb) => { const d = path.join(__dirname,'../uploads'); if (!fs.existsSync(d)) fs.mkdirSync(d,{recursive:true}); cb(null,d); },
-  filename: (req, file, cb) => cb(null, uuid() + path.extname(file.originalname))
+const audioStorage = diskStorage({
+  destination: (req, file, cb) => { const d = join(__dirname,'../uploads'); if (!existsSync(d)) mkdirSync(d,{recursive:true}); cb(null,d); },
+  filename: (req, file, cb) => cb(null, uuid() + extname(file.originalname))
 });
 const upload = multer({ storage: audioStorage, limits: { fileSize: 100*1024*1024 },
-  fileFilter: (req,file,cb) => ['.mp3','.wav','.flac','.ogg','.m4a','.aac'].includes(path.extname(file.originalname).toLowerCase()) ? cb(null,true) : cb(new Error('Audio files only'))
+  fileFilter: (req,file,cb) => ['.mp3','.wav','.flac','.ogg','.m4a','.aac'].includes(extname(file.originalname).toLowerCase()) ? cb(null,true) : cb(new Error('Audio files only'))
 });
 
 router.get('/', optionalAuth, (req, res) => {
@@ -95,4 +95,4 @@ router.post('/download/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-module.exports = router;
+export default router;

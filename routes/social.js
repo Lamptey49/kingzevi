@@ -1,21 +1,21 @@
-const express = require('express');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { v4: uuid } = require('uuid');
-const { all, get, run } = require('../db/database');
-const { requireAuth, optionalAuth } = require('../middleware/auth');
+import { Router } from 'express';
+import multer, { diskStorage } from 'multer';
+import { join, extname } from 'path';
+import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { v4 as uuid } from 'uuid';
+import { all, get, run } from '../db/database';
+import { requireAuth, optionalAuth } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
 // Image upload config
-const imageStorage = multer.diskStorage({
+const imageStorage = diskStorage({
   destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../uploads/social');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const dir = join(__dirname, '../uploads/social');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
-  filename: (req, file, cb) => cb(null, uuid() + path.extname(file.originalname))
+  filename: (req, file, cb) => cb(null, uuid() + extname(file.originalname))
 });
 
 const uploadImage = multer({
@@ -23,7 +23,7 @@ const uploadImage = multer({
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: (req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    allowed.includes(path.extname(file.originalname).toLowerCase())
+    allowed.includes(extname(file.originalname).toLowerCase())
       ? cb(null, true)
       : cb(new Error('Image files only (jpg, png, gif, webp)'));
   }
@@ -106,8 +106,8 @@ router.delete('/posts/:id', requireAuth, (req, res) => {
 
   // Clean up image file
   if (post.image_filename) {
-    const fp = path.join(__dirname, '../uploads/social', post.image_filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    const fp = join(__dirname, '../uploads/social', post.image_filename);
+    if (existsSync(fp)) unlinkSync(fp);
   }
 
   run('DELETE FROM comments WHERE post_id = ?', [req.params.id]);
@@ -192,4 +192,4 @@ router.get('/stats', optionalAuth, (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

@@ -1,10 +1,10 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const { v4: uuid } = require('uuid');
-const { get, run } = require('../db/database');
-const { signToken, requireAuth } = require('../middleware/auth');
+import { Router } from 'express';
+import { hash as _hash, compare } from 'bcryptjs';
+import { v4 as uuid } from 'uuid';
+import { get, run } from '../db/database';
+import { signToken, requireAuth } from '../middleware/auth';
 
-const router = express.Router();
+const router = Router();
 
 router.post('/register', async (req, res) => {
   try {
@@ -16,7 +16,7 @@ router.post('/register', async (req, res) => {
 
     const userRole = role === 'artist' ? 'artist' : 'fan';
     const userAvatar = avatar || (userRole === 'artist' ? '🎤' : '🎧');
-    const hash = await bcrypt.hash(password, 12);
+    const hash = await _hash(password, 12);
     const id = uuid();
     run('INSERT INTO users (id,username,email,password_hash,role,avatar) VALUES (?,?,?,?,?,?)', [id, username, email, hash, userRole, userAvatar]);
 
@@ -30,7 +30,7 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     const user = get('SELECT * FROM users WHERE email = ?', [email]);
-    if (!user || !await bcrypt.compare(password, user.password_hash)) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!user || !await compare(password, user.password_hash)) return res.status(401).json({ error: 'Invalid email or password' });
 
     const token = signToken({ id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar });
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar } });
@@ -43,4 +43,4 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user });
 });
 
-module.exports = router;
+export default router;

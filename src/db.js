@@ -1,13 +1,13 @@
-const fs = require('fs');
-const path = require('path');
-const initSqlJs = require('sql.js');
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
+import { resolve, join } from 'path';
+import initSqlJs from 'sql.js';
 
 const dataDir = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.join(__dirname, '..', 'data');
-const dbPath = path.join(dataDir, 'app.db');
+  ? resolve(process.env.DATA_DIR)
+  : join(__dirname, '..', 'data');
+const dbPath = join(dataDir, 'app.db');
 
-fs.mkdirSync(dataDir, { recursive: true });
+mkdirSync(dataDir, { recursive: true });
 
 let SQL;
 let db;
@@ -15,7 +15,7 @@ let writeQueue = Promise.resolve();
 
 function persist() {
   const data = db.export();
-  fs.writeFileSync(dbPath, Buffer.from(data));
+  writeFileSync(dbPath, Buffer.from(data));
 }
 
 function bindParams(statement, params = []) {
@@ -73,8 +73,8 @@ function enqueueWrite(operation) {
 
 async function initDb() {
   SQL = await initSqlJs();
-  db = fs.existsSync(dbPath)
-    ? new SQL.Database(fs.readFileSync(dbPath))
+  db = existsSync(dbPath)
+    ? new SQL.Database(readFileSync(dbPath))
     : new SQL.Database();
 
   await run('PRAGMA foreign_keys = ON');
@@ -241,7 +241,7 @@ async function listMusic() {
   };
 }
 
-module.exports = {
+export default {
   all,
   get,
   initDb,

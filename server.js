@@ -38,9 +38,9 @@ if (!isProd) {
 }
 
 // ── API ROUTES ────────────────────────────────────────────────
-app.use('/api/auth',   require('./routes/auth'));
-app.use('/api/music',  require('./routes/music'));
-app.use('/api/social', require('./routes/social'));
+app.use('/api/auth',   require('./routes/auth').default);
+app.use('/api/music',  require('./routes/music').default);
+app.use('/api/social', require('./routes/social').default);
 
 app.get('/api/health', (req, res) =>
   res.json({ status: 'ok', env: process.env.NODE_ENV, time: new Date().toISOString() })
