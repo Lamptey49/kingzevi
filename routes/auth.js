@@ -1,44 +1,66 @@
 import { Router } from 'express';
-import { hash as _hash, compare } from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'uuid';
-import { get, run } from '../db/database';
-import { signToken, requireAuth } from '../middleware/auth';
+import { get, run } from '../db/database.js';
+import { signToken, requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
 router.post('/register', async (req, res) => {
   try {
     const { username, email, password, role, avatar } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: 'Username, email, and password are required' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    if (get('SELECT id FROM users WHERE email = ?', [email])) return res.status(409).json({ error: 'Email already in use' });
-    if (get('SELECT id FROM users WHERE username = ?', [username])) return res.status(409).json({ error: 'Username already taken' });
+
+    if (!username || !email || !password)
+      return res.status(400).json({ error: 'Username, email, and password are required' });
+    if (password.length < 6)
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (get('SELECT id FROM users WHERE email = ?', [email]))
+      return res.status(409).json({ error: 'Email already in use' });
+    if (get('SELECT id FROM users WHERE username = ?', [username]))
+      return res.status(409).json({ error: 'Username already taken' });
 
     const userRole = role === 'artist' ? 'artist' : 'fan';
-    const userAvatar = avatar || (userRole === 'artist' ? '🎤' : '🎧');
-    const hash = await _hash(password, 12);
+    const userAvatar = avatar ?? (userRole === 'artist' ? '🎤' : '🎧');
+    const hash = await bcrypt.hash(password, 12);
     const id = uuid();
-    run('INSERT INTO users (id,username,email,password_hash,role,avatar) VALUES (?,?,?,?,?,?)', [id, username, email, hash, userRole, userAvatar]);
+
+    run(
+      'INSERT INTO users (id,username,email,password_hash,role,avatar) VALUES (?,?,?,?,?,?)',
+      [id, username, email, hash, userRole, userAvatar],
+    );
 
     const token = signToken({ id, username, email, role: userRole, avatar: userAvatar });
     res.status(201).json({ token, user: { id, username, email, role: userRole, avatar: userAvatar } });
-  } catch (e) { res.status(500).json({ error: 'Registration failed' }); }
+  } catch {
+    res.status(500).json({ error: 'Registration failed' });
+  }
 });
 
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-    const user = get('SELECT * FROM users WHERE email = ?', [email]);
-    if (!user || !await compare(password, user.password_hash)) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!email || !password)
+      return res.status(400).json({ error: 'Email and password required' });
 
-    const token = signToken({ id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar });
+    const user = get('SELECT * FROM users WHERE email = ?', [email]);
+    if (!user || !(await bcrypt.compare(password, user.password_hash)))
+      return res.status(401).json({ error: 'Invalid email or password' });
+
+    const token = signToken({
+      id: user.id, username: user.username,
+      email: user.email, role: user.role, avatar: user.avatar,
+    });
     res.json({ token, user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar } });
-  } catch (e) { res.status(500).json({ error: 'Login failed' }); }
+  } catch {
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
 router.get('/me', requireAuth, (req, res) => {
-  const user = get('SELECT id,username,email,role,avatar,bio,created_at FROM users WHERE id = ?', [req.user.id]);
+  const user = get(
+    'SELECT id,username,email,role,avatar,bio,created_at FROM users WHERE id = ?',
+    [req.user.id],
+  );
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ user });
 });

@@ -1,25 +1,43 @@
 import initSqlJs from 'sql.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// In production (Render) DB_PATH points to the persistent disk at /data/solace.db
-// Locally it falls back to the project directory
-const DB_PATH = process.env.DB_PATH || join(__dirname, '..', 'solace.db');
+// ES modules don't have __dirname — derive it from import.meta.url
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Production: Render persistent disk  →  DB_PATH=/data/solace.db
+// Local dev:  falls back to repo root →  ./solace.db
+const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '..', 'solace.db');
+
 let db = null;
 
-async function getDb() {
+export async function getDb() {
   if (db) return db;
+
   const SQL = await initSqlJs();
-  db = existsSync(DB_PATH)
-    ? new SQL.Database(readFileSync(DB_PATH))
+
+  // Ensure the parent directory exists (critical on first boot in prod
+  // where /data is a freshly mounted empty disk)
+  const dir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`📁 Created database directory: ${dir}`);
+  }
+
+  db = fs.existsSync(DB_PATH)
+    ? new SQL.Database(fs.readFileSync(DB_PATH))
     : new SQL.Database();
+
+  console.log(`🗄️  Database: ${fs.existsSync(DB_PATH) ? 'loaded existing' : 'created new'} → ${DB_PATH}`);
+
   initSchema();
   return db;
 }
 
-function save() {
+export function save() {
   if (!db) return;
-  writeFileSync(DB_PATH, Buffer.from(db.export()));
+  fs.writeFileSync(DB_PATH, Buffer.from(db.export()));
 }
 
 function initSchema() {
@@ -73,7 +91,6 @@ function initSchema() {
       streamed_at TEXT DEFAULT (datetime('now'))
     );
 
-    /* ── SOCIAL ── */
     CREATE TABLE IF NOT EXISTS posts (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -110,7 +127,7 @@ function initSchema() {
   save();
 }
 
-function all(sql, params = []) {
+export function all(sql, params = []) {
   const stmt = db.prepare(sql);
   const rows = [];
   stmt.bind(params);
@@ -119,13 +136,11 @@ function all(sql, params = []) {
   return rows;
 }
 
-function get(sql, params = []) {
-  return all(sql, params)[0] || null;
+export function get(sql, params = []) {
+  return all(sql, params)[0] ?? null;
 }
 
-function run(sql, params = []) {
+export function run(sql, params = []) {
   db.run(sql, params);
   save();
 }
-
-export default { getDb, save, all, get, run };

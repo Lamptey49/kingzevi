@@ -1,9 +1,9 @@
 {
-  "name": "KingZevi",
+  "name": "solace",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "SOLACE music artist platform",
   "type": "module",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"

@@ -1,28 +1,35 @@
-import { sign, verify } from 'jsonwebtoken';
-const SECRET = process.env.JWT_SECRET || 'solace_secret_2026';
+import jwt from 'jsonwebtoken';
 
-const signToken = payload => sign(payload, SECRET, { expiresIn: '7d' });
+const SECRET = process.env.JWT_SECRET ?? 'solace_secret_2026';
 
-function requireAuth(req, res, next) {
-  const h = req.headers['authorization'];
-  const tok = h && h.startsWith('Bearer ') ? h.slice(7) : null;
-  if (!tok) return res.status(401).json({ error: 'Authentication required' });
-  try { req.user = verify(tok, SECRET); next(); }
-  catch { res.status(401).json({ error: 'Invalid or expired token' }); }
+export const signToken = (payload) =>
+  jwt.sign(payload, SECRET, { expiresIn: '7d' });
+
+export function requireAuth(req, res, next) {
+  const header = req.headers['authorization'];
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Authentication required' });
+  try {
+    req.user = jwt.verify(token, SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
 }
 
-function requireArtist(req, res, next) {
+export function requireArtist(req, res, next) {
   requireAuth(req, res, () => {
-    if (req.user.role !== 'artist') return res.status(403).json({ error: 'Artist access required' });
+    if (req.user.role !== 'artist')
+      return res.status(403).json({ error: 'Artist access required' });
     next();
   });
 }
 
-function optionalAuth(req, res, next) {
-  const h = req.headers['authorization'];
-  const tok = h && h.startsWith('Bearer ') ? h.slice(7) : null;
-  if (tok) { try { req.user = verify(tok, SECRET); } catch {} }
+export function optionalAuth(req, res, next) {
+  const header = req.headers['authorization'];
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
+  if (token) {
+    try { req.user = jwt.verify(token, SECRET); } catch { /* ignored */ }
+  }
   next();
 }
-
-export default { signToken, requireAuth, requireArtist, optionalAuth };
