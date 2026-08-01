@@ -6,9 +6,11 @@ import { fileURLToPath } from 'url';
 // ES modules don't have __dirname — derive it from import.meta.url
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Production: Render persistent disk  →  DB_PATH=/data/solace.db
-// Local dev:  falls back to repo root →  ./solace.db
-const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '..', 'solace.db');
+// Production: prefer an explicit DB_PATH if provided.
+// Vercel/serverless environments do not guarantee /data exists, so fall back to a writable temp path.
+const DB_PATH = process.env.DB_PATH ?? process.env.NODE_ENV === 'production'
+  ? path.join('/tmp', 'solace.db')
+  : path.join(__dirname, '..', 'solace.db');
 
 let db = null;
 

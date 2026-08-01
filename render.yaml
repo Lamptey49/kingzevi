@@ -31,7 +31,7 @@ services:
         value: solace.db
 
     # Persistent disk so SQLite survives redeploys and restarts
-    disk:
-      name: solace-data
-      mountPath: /data
-      sizeGB: 1                  # 1 GB is plenty for SQLite
+    # disk:
+    #   name: solace-data
+    #   mountPath: /data
+    #   sizeGB: 1                  # 1 GB is plenty for SQLite
