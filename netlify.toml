@@ -23,7 +23,7 @@
 # Change the `to` value to your Render URL (keep /:splat).
 [[redirects]]
   from   = "/api/*"
-  to     = "https://YOUR-APP-NAME.onrender.com/api/:splat"
+  to     = "https://kingzevi.onrender.com/api/:splat"
   status = 200        # 200 = proxy (invisible to browser)
   force  = true       # override any matching static file
 
@@ -31,7 +31,7 @@
 # If fans upload images, Netlify proxies /uploads/* too.
 [[redirects]]
   from   = "/uploads/*"
-  to     = "https://YOUR-APP-NAME.onrender.com/uploads/:splat"
+  to     = "https://kingzevi.onrender.com/uploads/:splat"
   status = 200
   force  = true
 
