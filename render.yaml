@@ -28,7 +28,7 @@ services:
         generateValue: true      # Render generates a secure random value
       # SQLite DB path — Render provides a persistent disk (see below)
       - key: DB_PATH
-        value: /data/solace.db
+        value: solace.db
 
     # Persistent disk so SQLite survives redeploys and restarts
     disk:
