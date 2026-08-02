@@ -28,4 +28,4 @@ services:
         generateValue: true      # Render generates a secure random value
 # SQLite DB path — keep the database in the app root in production
       - key: DB_PATH
-        value: solace.db
+        value: /more/solace.db

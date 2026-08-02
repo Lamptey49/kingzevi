@@ -14,13 +14,13 @@ function resolveDbPath() {
     return path.join(__dirname, '..', 'solace.db');
   }
 
-  return path.join(__dirname, '..', 'data', 'solace.db');
+  return path.join(__dirname, '..', 'more', 'solace.db');
 }
 
 function migrateLegacyDatabase(targetPath) {
   const legacyPaths = [
     path.join(__dirname, '..', 'solace.db'),
-    path.join(__dirname, '..', 'data', 'solace.db'),
+    path.join(__dirname, '..', 'more', 'solace.db'),
     path.join('/', 'solace.db'),
   ].filter(candidate => candidate && candidate !== targetPath && fs.existsSync(candidate));
 
