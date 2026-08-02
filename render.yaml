@@ -28,10 +28,10 @@ services:
         generateValue: true      # Render generates a secure random value
       # SQLite DB path — use a mounted persistent disk in production
       - key: DB_PATH
-        value: /data/solace.db
+        value: /solace.db
 
     # Persistent disk so SQLite survives redeploys and restarts
     disk:
       name: solace-data
-      mountPath: /data
+      mountPath: /
       sizeGB: 1                  # 1 GB is plenty for SQLite

@@ -34,12 +34,12 @@ always talks to one domain — no CORS headaches, no code changes.
    |------------------|------------------------------------------|
    | `NODE_ENV`       | `production`                             |
    | `JWT_SECRET`     | (click "Generate" for a random value)    |
-   | `DB_PATH`        | `/data/solace.db`                        |
+   | `DB_PATH`        | `./solace.db`                        |
    | `ALLOWED_ORIGIN` | *(leave blank for now — fill after step 2)* |
 
 5. Under **Disks**, add a disk:
    - Name: `solace-data`
-   - Mount Path: `/data`
+   - Mount Path: `./`
    - Size: 1 GB
 
 6. Click **Create Web Service**. Wait for the first deploy (~2 min).
