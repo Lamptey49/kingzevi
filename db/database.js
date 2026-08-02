@@ -11,7 +11,7 @@ function resolveDbPath() {
   if (configuredPath) return path.resolve(configuredPath);
 
   if (process.env.NODE_ENV === 'production') {
-    return '/data/solace.db';
+    return '/solace.db';
   }
 
   return path.join(__dirname, '..', 'data', 'solace.db');
@@ -20,7 +20,7 @@ function resolveDbPath() {
 function migrateLegacyDatabase(targetPath) {
   const legacyPaths = [
     path.join(__dirname, '..', 'solace.db'),
-    path.join('/tmp', 'solace.db'),
+    path.join('/', 'solace.db'),
   ].filter(candidate => candidate && candidate !== targetPath && fs.existsSync(candidate));
 
   if (!legacyPaths.length || fs.existsSync(targetPath)) return;
