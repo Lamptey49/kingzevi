@@ -4,8 +4,8 @@ import initSqlJs from 'sql.js';
 
 const dataDir = process.env.DATA_DIR
   ? resolve(process.env.DATA_DIR)
-  : join(__dirname, '..', 'data');
-const dbPath = join(dataDir, 'app.db');
+  : join(__dirname, '..', '/');
+const dbPath = join(dataDir, 'solace.db');
 
 mkdirSync(dataDir, { recursive: true });
 
