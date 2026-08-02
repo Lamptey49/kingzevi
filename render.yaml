@@ -26,12 +26,6 @@ services:
         value: production
       - key: JWT_SECRET
         generateValue: true      # Render generates a secure random value
-      # SQLite DB path — use a mounted persistent disk in production
+# SQLite DB path — keep the database in the app root in production
       - key: DB_PATH
-        value: /solace.db
-
-    # Persistent disk so SQLite survives redeploys and restarts
-    disk:
-      name: solace-data
-      mountPath: /
-      sizeGB: 1                  # 1 GB is plenty for SQLite
+        value: solace.db

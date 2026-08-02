@@ -11,15 +11,16 @@ function resolveDbPath() {
   if (configuredPath) return path.resolve(configuredPath);
 
   if (process.env.NODE_ENV === 'production') {
-    return '/solace.db';
+    return path.join(__dirname, '..', 'solace.db');
   }
 
-  return path.join(__dirname, '..', '/', 'solace.db');
+  return path.join(__dirname, '..', 'data', 'solace.db');
 }
 
 function migrateLegacyDatabase(targetPath) {
   const legacyPaths = [
     path.join(__dirname, '..', 'solace.db'),
+    path.join(__dirname, '..', 'data', 'solace.db'),
     path.join('/', 'solace.db'),
   ].filter(candidate => candidate && candidate !== targetPath && fs.existsSync(candidate));
 
@@ -39,6 +40,21 @@ const DB_PATH = resolveDbPath();
 
 let db = null;
 
+function ensureWritableDatabasePath(targetPath) {
+  const dir = path.dirname(targetPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
+  try {
+    const probeFile = path.join(dir, '.write-check');
+    fs.writeFileSync(probeFile, 'ok');
+    fs.unlinkSync(probeFile);
+  } catch (error) {
+    throw new Error(`Database directory is not writable: ${dir} (${error.message})`);
+  }
+}
+
 export async function getDb() {
   if (db) return db;
 
@@ -46,11 +62,8 @@ export async function getDb() {
 
   // Ensure the parent directory exists (critical on first boot in prod
   // where /data is a freshly mounted empty disk)
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    console.log(`📁 Created database directory: ${dir}`);
-  }
+  ensureWritableDatabasePath(DB_PATH);
+  console.log(`📁 Database directory ready: ${path.dirname(DB_PATH)}`);
 
   migrateLegacyDatabase(DB_PATH);
 
