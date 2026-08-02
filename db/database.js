@@ -14,7 +14,7 @@ function resolveDbPath() {
     return '/solace.db';
   }
 
-  return path.join(__dirname, '..', 'data', 'solace.db');
+  return path.join(__dirname, '..', '/', 'solace.db');
 }
 
 function migrateLegacyDatabase(targetPath) {
