@@ -4,10 +4,7 @@ node_modules/
 # Environment secrets — NEVER commit
 .env
 
-# SQLite database files
-*.db
-*.db-shm
-*.db-wal
+
 
 # Uploaded files (audio, images)
 uploads/
