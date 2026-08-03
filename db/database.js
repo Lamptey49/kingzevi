@@ -5,26 +5,45 @@ import { fileURLToPath } from 'url';
 
 // ES modules don't have __dirname — derive it from import.meta.url
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 function resolveDbPath() {
   const configuredPath = process.env.DB_PATH?.trim();
-  if (configuredPath) return path.resolve(configuredPath);
-
-  if (process.env.NODE_ENV === 'production') {
-    return path.join(__dirname, '..', 'solace.db');
+  if (configuredPath) {
+    return path.isAbsolute(configuredPath)
+      ? configuredPath
+      : path.resolve(PROJECT_ROOT, configuredPath);
   }
 
-  return path.join(__dirname, '..', 'more', 'solace.db');
+  return path.join(PROJECT_ROOT, 'solace.db');
+}
+
+function getPreferredDatabasePaths() {
+  const configuredPath = process.env.DB_PATH?.trim();
+  const explicitPaths = [];
+
+  if (configuredPath) {
+    explicitPaths.push(path.isAbsolute(configuredPath)
+      ? configuredPath
+      : path.resolve(PROJECT_ROOT, configuredPath));
+  }
+
+  return [
+    ...explicitPaths,
+    path.join(PROJECT_ROOT, 'solace.db'),
+    path.join(PROJECT_ROOT, 'more', 'solace.db'),
+    path.join(PROJECT_ROOT, 'data', 'solace.db'),
+    path.join('/', 'solace.db'),
+  ].filter((candidate, index, list) => candidate && list.indexOf(candidate) === index);
 }
 
 function migrateLegacyDatabase(targetPath) {
-  const legacyPaths = [
-    path.join(__dirname, '..', 'solace.db'),
-    path.join(__dirname, '..', 'more', 'solace.db'),
-    path.join('/', 'solace.db'),
-  ].filter(candidate => candidate && candidate !== targetPath && fs.existsSync(candidate));
+  if (fs.existsSync(targetPath)) return;
 
-  if (!legacyPaths.length || fs.existsSync(targetPath)) return;
+  const legacyPaths = getPreferredDatabasePaths()
+    .filter(candidate => candidate !== targetPath && fs.existsSync(candidate));
+
+  if (!legacyPaths.length) return;
 
   const sourcePath = legacyPaths[0];
   const dir = path.dirname(targetPath);
