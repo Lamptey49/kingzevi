@@ -1,11 +1,9 @@
 
 // ── CONFIG ──
-// Initialize token early so helper functions can reference it safely.
-let me = null;
-let token = localStorage.getItem('st');
-const APP_PATH = window.location.pathname.replace(/\/[^/]*$/, '').replace(/\/$/, '');
-const CONFIG = window.__APP_CONFIG__ || {};
-const API_BASE_URL = String(CONFIG.apiBaseUrl || window.API_BASE_URL || '').replace(/\/$/, '');
+const BASE = window.location.origin;
+
+// ── STATE ──
+let me = null, token = localStorage.getItem('st');
 let allSingles = [], allAlbums = [];
 let currentTrack = null, playing = false, timer = null, fp = 0, fd = 200;
 let trackCount = 0;
@@ -15,42 +13,13 @@ let selectedImageFile = null;
 let postPage = 1, postPages = 1;
 
 // ── API ──
-function buildApiUrl(path) {
-  const base = String(CONFIG.apiBaseUrl || window.API_BASE_URL || '').trim().replace(/\/$/, '');
-  const cleanPath = String(path || '').trim();
-
-  if (!cleanPath) return '/api';
-  if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
-
-  const withoutLeadingSlash = cleanPath.replace(/^\/+/, '');
-  const withoutApiPrefix = withoutLeadingSlash.replace(/^api\//i, '');
-  const apiPath = `api/${withoutApiPrefix}`;
-
-  if (!base) return `/${apiPath}`;
-  const normalizedBase = base.replace(/\/api\/?$/, '');
-  return `${normalizedBase}/${apiPath}`;
-}
-
 async function api(method, path, body, isForm) {
-  const headers = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const url = buildApiUrl(path);
-
-  async function request(url) {
-   
-    const res = await fetch(url, { method, headers, body: body ? (isForm ? body : JSON.stringify(body)) : undefined });
-    const text = await res.text();
-    let data = {};
-    try { data = JSON.parse(text); } catch (error) { data = { error: text || 'Invalid response from server' }; }
-    return { res, data, text };
-  }
-
-  const result = await request(url);
-  if (result.res.ok) return result.data;
-  const errMsg = result.data.error || `Error ${result.res.status}`;
-  console.error('API error', { method, path, url, status: result.res.status, body: result.data, raw: result.text });
-  throw new Error(errMsg);
+  const h = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
+  const r = await fetch(BASE+'/api'+path, { method, headers:h, body: body ? (isForm?body:JSON.stringify(body)) : undefined });
+  const d = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(d.error||'Error');
+  return d;
 }
-
 
 // ── INIT ──
 async function init() {
@@ -71,7 +40,7 @@ function switchAuthTab(t) {
   document.getElementById('reg-form').style.display = t==='register'?'block':'none';
   document.getElementById('atab-login').classList.toggle('active', t==='login');
   document.getElementById('atab-reg').classList.toggle('active', t==='register');
-  document.getElementById('auth-sub-text').textContent = t==='login'?'Sign in to your account':'Create your SOLACE account';
+  document.getElementById('auth-sub-text').textContent = t==='login'?'Sign in to your account':'Create your KINGZEVI account';
   document.getElementById('auth-switch').innerHTML = t==='login'
     ? `Don't have an account? <span onclick="switchAuthTab('register')">Join now</span>`
     : `Already have an account? <span onclick="switchAuthTab('login')">Sign in</span>`;
@@ -89,16 +58,8 @@ async function doLogin() {
   clearErr();
   const email=document.getElementById('l-email').value.trim(), pass=document.getElementById('l-pass').value;
   if (!email||!pass) return showErr('Fill in all fields');
-  try {
-    const d=await api('POST','/auth/login',{email,password:pass});
-    applyUser(d.user,d.token);
-    closeAuth();
-    updateUI();
-    toast('Welcome back, '+d.user.username+'! 🎵');
-  } catch(e) {
-    console.error('Login failed', { email, message: e.message });
-    showErr(e.message || 'Login failed. Check console for details.');
-  }
+  try { const d=await api('POST','/auth/login',{email,password:pass}); applyUser(d.user,d.token); closeAuth(); updateUI(); toast('Welcome back, '+d.user.username+'! 🎵'); }
+  catch(e) { showErr(e.message); }
 }
 async function doRegister() {
   clearErr();
@@ -118,38 +79,22 @@ function logout() {
 }
 function updateUI() {
   const loggedIn = !!me;
-  const headerGuest = document.getElementById('header-guest');
-  const headerUser = document.getElementById('header-user');
-  if (headerGuest) headerGuest.style.display = loggedIn ? 'none' : 'flex';
-  if (headerUser) headerUser.style.display = loggedIn ? 'block' : 'none';
-
+  document.getElementById('header-guest').style.display = loggedIn ? 'none' : 'flex';
+  document.getElementById('header-user').style.display = loggedIn ? 'block' : 'none';
   if (me) {
-    const avatarEl = document.getElementById('h-avatar');
-    const nameEl = document.getElementById('h-name');
+    document.getElementById('h-avatar').textContent = me.avatar||'🎧';
+    document.getElementById('h-name').textContent = me.username;
     const roleEl = document.getElementById('h-role');
-    const composerAvatar = document.getElementById('composer-av');
-    if (avatarEl) avatarEl.textContent = me.avatar||'🎧';
-    if (nameEl) nameEl.textContent = me.username;
-    if (roleEl) {
-      roleEl.textContent = me.role;
-      roleEl.className = 'u-role ' + (me.role==='artist'?'artist':'fan');
-    }
-    if (composerAvatar) composerAvatar.textContent = me.avatar||'🎧';
+    roleEl.textContent = me.role;
+    roleEl.className = 'u-role ' + (me.role==='artist'?'artist':'fan');
+    document.getElementById('composer-av').textContent = me.avatar||'🎧';
   }
-
   const isArtist = me && me.role==='artist';
-  const uploadGate = document.getElementById('upload-gate');
-  const uploadPanel = document.getElementById('upload-panel');
-  const composer = document.getElementById('composer');
-  const feedLoginPrompt = document.getElementById('feed-login-prompt');
-  const sidebarLogin = document.getElementById('sidebar-login');
-
-  if (uploadGate) uploadGate.style.display = isArtist ? 'none' : 'block';
-  if (uploadPanel) uploadPanel.style.display = isArtist ? 'block' : 'none';
-  if (composer) composer.style.display = loggedIn ? 'block' : 'none';
-  if (feedLoginPrompt) feedLoginPrompt.style.display = loggedIn ? 'none' : 'block';
-  if (sidebarLogin) sidebarLogin.style.display = loggedIn ? 'none' : 'block';
-
+  document.getElementById('upload-gate').style.display = isArtist ? 'none' : 'block';
+  document.getElementById('upload-panel').style.display = isArtist ? 'block' : 'none';
+  document.getElementById('composer').style.display = loggedIn ? 'block' : 'none';
+  document.getElementById('feed-login-prompt').style.display = loggedIn ? 'none' : 'block';
+  document.getElementById('sidebar-login').style.display = loggedIn ? 'none' : 'block';
   renderSingles(allSingles); renderAlbums(allAlbums);
 }
 
@@ -159,36 +104,24 @@ async function loadMusic() {
     const [s,a] = await Promise.all([api('GET','/music?type=single'), api('GET','/music?type=album')]);
     allSingles=s.music; allAlbums=a.music;
     renderSingles(allSingles); renderAlbums(allAlbums);
-    const statTracks = document.getElementById('stat-tracks');
-    const statAlbums = document.getElementById('stat-albums');
-    const statStreams = document.getElementById('stat-streams');
-    if (statTracks) statTracks.textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
-    if (statAlbums) statAlbums.textContent = allAlbums.length;
-    if (statStreams) statStreams.textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
-  } catch {
-    const singlesGrid = document.getElementById('singles-grid');
-    if (singlesGrid) singlesGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load music. Is the server running?</p></div>';
-  }
+    document.getElementById('stat-tracks').textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
+    document.getElementById('stat-albums').textContent = allAlbums.length;
+    document.getElementById('stat-streams').textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
+  } catch { document.getElementById('singles-grid').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load music. Is the server running?</p></div>'; }
 }
 async function loadSocialStats() {
   try {
     const d=await api('GET','/social/stats');
-    const statPosts = document.getElementById('stat-posts');
-    const sidebarPosts = document.getElementById('ss-posts');
-    const sidebarComments = document.getElementById('ss-comments');
-    const sidebarLikes = document.getElementById('ss-likes');
-    const sidebarFans = document.getElementById('ss-fans');
-    if (statPosts) statPosts.textContent = d.total_posts;
-    if (sidebarPosts) sidebarPosts.textContent = d.total_posts;
-    if (sidebarComments) sidebarComments.textContent = d.total_comments;
-    if (sidebarLikes) sidebarLikes.textContent = d.total_likes;
-    if (sidebarFans) sidebarFans.textContent = d.active_fans;
+    document.getElementById('stat-posts').textContent = d.total_posts;
+    document.getElementById('ss-posts').textContent = d.total_posts;
+    document.getElementById('ss-comments').textContent = d.total_comments;
+    document.getElementById('ss-likes').textContent = d.total_likes;
+    document.getElementById('ss-fans').textContent = d.active_fans;
   } catch {}
 }
 
 function renderSingles(list) {
   const g=document.getElementById('singles-grid');
-  if (!g) return;
   if (!list||!list.length) { g.innerHTML='<div class="empty-state"><div class="empty-icon">🎵</div><p class="empty-text">No singles yet.</p></div>'; return; }
   g.innerHTML=list.map((s,i)=>`
     <div class="music-card" onclick="playSingle(${i})">
@@ -208,7 +141,6 @@ function renderSingles(list) {
 }
 function renderAlbums(list) {
   const g=document.getElementById('albums-grid');
-  if (!g) return;
   if (!list||!list.length) { g.innerHTML='<div class="empty-state"><div class="empty-icon">💿</div><p class="empty-text">No albums yet.</p></div>'; return; }
   g.innerHTML=list.map((a,i)=>`
     <div class="music-card" onclick="openAlbum(${i})">
@@ -405,18 +337,15 @@ async function submitPost() {
 
 // ── SOCIAL: FEED ──
 async function loadPosts(page=1) {
-  const feed = document.getElementById('posts-feed');
-  const loadMore = document.getElementById('load-more');
-  if (!feed) return;
   if (page===1) document.getElementById('posts-feed').innerHTML='<div class="loading-state"><div class="spinner"></div>Loading posts…</div>';
   try {
     const d=await api('GET','/social/posts?page='+page+'&limit=10');
     postPage=d.page; postPages=d.pages;
-    if(page===1) feed.innerHTML='';
+    if(page===1) document.getElementById('posts-feed').innerHTML='';
     d.posts.forEach(p=>appendPost(p));
-    if (loadMore) loadMore.style.display=postPage<postPages?'block':'none';
-    if(page===1&&d.posts.length===0) feed.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p class="empty-text">No posts yet. Be the first to share!</p></div>';
-  } catch(e) { feed.innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load posts.</p></div>'; }
+    document.getElementById('load-more').style.display=postPage<postPages?'block':'none';
+    if(page===1&&d.posts.length===0) document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p class="empty-text">No posts yet. Be the first to share!</p></div>';
+  } catch(e) { document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load posts.</p></div>'; }
 }
 async function loadMorePosts() {
   await loadPosts(postPage+1);
@@ -431,8 +360,7 @@ function prependPost(post) {
 }
 function appendPost(post) {
   const el=buildPostEl(post);
-  const feed = document.getElementById('posts-feed');
-  if (feed) feed.appendChild(el);
+  document.getElementById('posts-feed').appendChild(el);
 }
 
 function buildPostEl(post) {
@@ -582,28 +510,14 @@ function toast(msg, isErr=false) {
   setTimeout(()=>el.classList.remove('show'),3200);
 }
 
-// ── MOBILE NAV TOGGLE ──
-function toggleMobileNav() {
-  const nav = document.querySelector('.nav-links');
-  if (!nav) return;
-  nav.classList.toggle('mobile-open');
-}
-
-// Close mobile nav when resizing to desktop
-window.addEventListener('resize', ()=>{
-  const nav = document.querySelector('.nav-links');
-  if (!nav) return;
-  if (window.innerWidth > 768 && nav.classList.contains('mobile-open')) nav.classList.remove('mobile-open');
-});
-
 // ── KEYBOARD SHORTCUTS ──
-// document.getElementById('l-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
-// document.getElementById('r-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doRegister(); });
+document.getElementById('l-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
+document.getElementById('r-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') doRegister(); });
 
 // ── DRAG DROP (audio) ──
-// const dz=document.getElementById('s-drop');
-// ['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
-// ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
-// dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
+const dz=document.getElementById('s-drop');
+['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
+dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
 
 init();

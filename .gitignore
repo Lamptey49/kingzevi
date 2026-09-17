@@ -1,18 +1,5 @@
-# Dependencies
 node_modules/
-
-# Environment secrets — NEVER commit
 .env
-
-
-
-# Uploaded files (audio, images)
 uploads/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
 *.log
-npm-debug.log*
+.DS_Store

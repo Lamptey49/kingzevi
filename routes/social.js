@@ -1,71 +1,95 @@
-import { Router } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
+import { Router }        from 'express';
+import multer            from 'multer';
+import path              from 'path';
+import fs                from 'fs';
 import { fileURLToPath } from 'url';
-import { v4 as uuid } from 'uuid';
-import { all, get, run } from '../db/database.js';
+import { Post, PostLike, Comment } from '../db/models.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const router = Router();
+const router    = Router();
 
 // ── Image upload ──────────────────────────────────────────────
 const imageStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, '../uploads/social');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
-  filename: (req, file, cb) => cb(null, uuid() + path.extname(file.originalname)),
+  filename: (req, file, cb) =>
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(file.originalname)}`),
 });
 
 const uploadImage = multer({
   storage: imageStorage,
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    allowed.includes(path.extname(file.originalname).toLowerCase())
+    ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(path.extname(file.originalname).toLowerCase())
       ? cb(null, true)
       : cb(new Error('Image files only (jpg, png, gif, webp)'));
   },
 });
 
-// ── Helper ────────────────────────────────────────────────────
-function enrichPosts(posts, userId) {
-  return posts.map((p) => ({
-    ...p,
-    liked_by_me: userId
-      ? Boolean(get('SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?', [p.id, userId]))
-      : false,
-  }));
+// ── Serialiser ────────────────────────────────────────────────
+function serializePost(post, likedByMe = false) {
+  const u = post.user_id;                       // populated User doc
+  return {
+    id:            post._id.toString(),
+    user_id:       u?._id?.toString() ?? post.user_id?.toString(),
+    content:       post.content ?? null,
+    image_url:     post.image_url ?? null,
+    post_type:     post.post_type,
+    like_count:    post.like_count,
+    comment_count: post.comment_count,
+    created_at:    post.created_at,
+    liked_by_me:   likedByMe,
+    username:      u?.username ?? '',
+    avatar:        u?.avatar   ?? '🎧',
+    role:          u?.role     ?? 'fan',
+  };
 }
 
 // ── GET /api/social/posts ─────────────────────────────────────
-router.get('/posts', optionalAuth, (req, res) => {
-  const limit  = Math.min(parseInt(req.query.limit, 10) || 20, 50);
-  const offset = (Math.max(parseInt(req.query.page,  10) || 1,  1) - 1) * limit;
+router.get('/posts', optionalAuth, async (req, res) => {
+  try {
+    const limit  = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    const page   = Math.max(parseInt(req.query.page,  10) || 1,  1);
+    const skip   = (page - 1) * limit;
 
-  const posts = all(
-    `SELECT p.*, u.username, u.avatar, u.role
-     FROM posts p
-     JOIN users u ON u.id = p.user_id
-     ORDER BY p.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [limit, offset],
-  );
-  const total = get('SELECT COUNT(*) AS c FROM posts').c;
+    const [posts, total] = await Promise.all([
+      Post.find()
+        .populate('user_id', 'username avatar role')
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Post.countDocuments(),
+    ]);
 
-  res.json({
-    posts: enrichPosts(posts, req.user?.id),
-    total,
-    page:  Math.floor(offset / limit) + 1,
-    pages: Math.ceil(total / limit),
-  });
+    // Build liked-by-me map in one query
+    let likedSet = new Set();
+    if (req.user) {
+      const likes = await PostLike.find({
+        post_id: { $in: posts.map(p => p._id) },
+        user_id: req.user.id,
+      }).select('post_id').lean();
+      likedSet = new Set(likes.map(l => l.post_id.toString()));
+    }
+
+    res.json({
+      posts: posts.map(p => serializePost(p, likedSet.has(p._id.toString()))),
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load posts' });
+  }
 });
 
 // ── POST /api/social/posts ────────────────────────────────────
-router.post('/posts', requireAuth, uploadImage.single('image'), (req, res) => {
+router.post('/posts', requireAuth, uploadImage.single('image'), async (req, res) => {
   try {
     const { content } = req.body;
     const file = req.file;
@@ -75,22 +99,19 @@ router.post('/posts', requireAuth, uploadImage.single('image'), (req, res) => {
     if (content?.length > 1000)
       return res.status(400).json({ error: 'Post text must be under 1000 characters' });
 
-    const id       = uuid();
-    const postType = file ? 'image' : 'text';
-    const imageUrl = file ? `/uploads/social/${file.filename}` : null;
+    const post = await Post.create({
+      user_id:        req.user.id,
+      content:        content || null,
+      image_filename: file?.filename ?? null,
+      image_url:      file ? `/uploads/social/${file.filename}` : null,
+      post_type:      file ? 'image' : 'text',
+    });
 
-    run(
-      'INSERT INTO posts (id,user_id,content,image_filename,image_url,post_type) VALUES (?,?,?,?,?,?)',
-      [id, req.user.id, content ?? null, file?.filename ?? null, imageUrl, postType],
-    );
+    const populated = await Post.findById(post._id)
+      .populate('user_id', 'username avatar role')
+      .lean();
 
-    const post = get(
-      `SELECT p.*, u.username, u.avatar, u.role
-       FROM posts p JOIN users u ON u.id = p.user_id
-       WHERE p.id = ?`,
-      [id],
-    );
-    res.status(201).json({ post: enrichPosts([post], req.user.id)[0] });
+    res.status(201).json({ post: serializePost(populated, false) });
   } catch (err) {
     console.error('Create post error:', err);
     res.status(500).json({ error: err.message ?? 'Failed to create post' });
@@ -98,99 +119,149 @@ router.post('/posts', requireAuth, uploadImage.single('image'), (req, res) => {
 });
 
 // ── DELETE /api/social/posts/:id ──────────────────────────────
-router.delete('/posts/:id', requireAuth, (req, res) => {
-  const post = get('SELECT * FROM posts WHERE id = ?', [req.params.id]);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
-  if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Not your post' });
+router.delete('/posts/:id', requireAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
+    if (post.user_id.toString() !== req.user.id)
+      return res.status(403).json({ error: 'Not your post' });
 
-  if (post.image_filename) {
-    const fp = path.join(__dirname, '../uploads/social', post.image_filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    // Delete image file if present
+    if (post.image_filename) {
+      const fp = path.join(__dirname, '../uploads/social', post.image_filename);
+      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    }
+
+    await Promise.all([
+      Comment.deleteMany({ post_id: post._id }),
+      PostLike.deleteMany({ post_id: post._id }),
+      post.deleteOne(),
+    ]);
+
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Delete failed' });
   }
-
-  run('DELETE FROM comments  WHERE post_id = ?', [req.params.id]);
-  run('DELETE FROM post_likes WHERE post_id = ?', [req.params.id]);
-  run('DELETE FROM posts      WHERE id = ?',      [req.params.id]);
-  res.json({ success: true });
 });
 
-// ── POST /api/social/posts/:id/like ──────────────────────────
-router.post('/posts/:id/like', requireAuth, (req, res) => {
-  const post = get('SELECT * FROM posts WHERE id = ?', [req.params.id]);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
+// ── POST /api/social/posts/:id/like  (toggle) ────────────────
+router.post('/posts/:id/like', requireAuth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
 
-  const existing = get(
-    'SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?',
-    [req.params.id, req.user.id],
-  );
+    const existing = await PostLike.findOne({ post_id: post._id, user_id: req.user.id });
 
-  if (existing) {
-    run('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?', [req.params.id, req.user.id]);
-    run('UPDATE posts SET like_count = MAX(0, like_count - 1) WHERE id = ?', [req.params.id]);
-    res.json({ liked: false, like_count: Math.max(0, (post.like_count ?? 0) - 1) });
-  } else {
-    run('INSERT INTO post_likes (id,post_id,user_id) VALUES (?,?,?)',
-      [uuid(), req.params.id, req.user.id]);
-    run('UPDATE posts SET like_count = like_count + 1 WHERE id = ?', [req.params.id]);
-    res.json({ liked: true, like_count: (post.like_count ?? 0) + 1 });
+    if (existing) {
+      await existing.deleteOne();
+      const updated = await Post.findByIdAndUpdate(
+        post._id,
+        { $inc: { like_count: -1 } },
+        { new: true },
+      );
+      res.json({ liked: false, like_count: Math.max(0, updated.like_count) });
+    } else {
+      await PostLike.create({ post_id: post._id, user_id: req.user.id });
+      const updated = await Post.findByIdAndUpdate(
+        post._id,
+        { $inc: { like_count: 1 } },
+        { new: true },
+      );
+      res.json({ liked: true, like_count: updated.like_count });
+    }
+  } catch {
+    res.status(500).json({ error: 'Failed to toggle like' });
   }
 });
 
 // ── GET /api/social/posts/:id/comments ───────────────────────
-router.get('/posts/:id/comments', optionalAuth, (req, res) => {
-  const comments = all(
-    `SELECT c.*, u.username, u.avatar, u.role
-     FROM comments c
-     JOIN users u ON u.id = c.user_id
-     WHERE c.post_id = ?
-     ORDER BY c.created_at ASC`,
-    [req.params.id],
-  );
-  res.json({ comments });
+router.get('/posts/:id/comments', optionalAuth, async (req, res) => {
+  try {
+    const comments = await Comment.find({ post_id: req.params.id })
+      .populate('user_id', 'username avatar role')
+      .sort({ created_at: 1 })
+      .lean();
+
+    res.json({
+      comments: comments.map(c => ({
+        id:         c._id.toString(),
+        post_id:    c.post_id.toString(),
+        user_id:    c.user_id?._id?.toString(),
+        content:    c.content,
+        created_at: c.created_at,
+        username:   c.user_id?.username ?? '',
+        avatar:     c.user_id?.avatar   ?? '🎧',
+        role:       c.user_id?.role     ?? 'fan',
+      })),
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to load comments' });
+  }
 });
 
 // ── POST /api/social/posts/:id/comments ──────────────────────
-router.post('/posts/:id/comments', requireAuth, (req, res) => {
-  const { content } = req.body;
-  if (!content?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
-  if (content.length > 500) return res.status(400).json({ error: 'Comment must be under 500 characters' });
+router.post('/posts/:id/comments', requireAuth, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
+    if (content.length > 500) return res.status(400).json({ error: 'Comment must be under 500 characters' });
 
-  const post = get('SELECT id FROM posts WHERE id = ?', [req.params.id]);
-  if (!post) return res.status(404).json({ error: 'Post not found' });
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Post not found' });
 
-  const id = uuid();
-  run('INSERT INTO comments (id,post_id,user_id,content) VALUES (?,?,?,?)',
-    [id, req.params.id, req.user.id, content.trim()]);
-  run('UPDATE posts SET comment_count = comment_count + 1 WHERE id = ?', [req.params.id]);
+    const comment = await Comment.create({ post_id: post._id, user_id: req.user.id, content: content.trim() });
+    await Post.findByIdAndUpdate(post._id, { $inc: { comment_count: 1 } });
 
-  const comment = get(
-    `SELECT c.*, u.username, u.avatar, u.role
-     FROM comments c JOIN users u ON u.id = c.user_id
-     WHERE c.id = ?`,
-    [id],
-  );
-  res.status(201).json({ comment });
+    const populated = await Comment.findById(comment._id)
+      .populate('user_id', 'username avatar role')
+      .lean();
+
+    res.status(201).json({
+      comment: {
+        id:         populated._id.toString(),
+        post_id:    populated.post_id.toString(),
+        user_id:    populated.user_id?._id?.toString(),
+        content:    populated.content,
+        created_at: populated.created_at,
+        username:   populated.user_id?.username ?? '',
+        avatar:     populated.user_id?.avatar   ?? '🎧',
+        role:       populated.user_id?.role     ?? 'fan',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── DELETE /api/social/comments/:id ──────────────────────────
-router.delete('/comments/:id', requireAuth, (req, res) => {
-  const c = get('SELECT * FROM comments WHERE id = ?', [req.params.id]);
-  if (!c) return res.status(404).json({ error: 'Comment not found' });
-  if (c.user_id !== req.user.id) return res.status(403).json({ error: 'Not your comment' });
+router.delete('/comments/:id', requireAuth, async (req, res) => {
+  try {
+    const comment = await Comment.findById(req.params.id);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+    if (comment.user_id.toString() !== req.user.id)
+      return res.status(403).json({ error: 'Not your comment' });
 
-  run('DELETE FROM comments WHERE id = ?', [req.params.id]);
-  run('UPDATE posts SET comment_count = MAX(0, comment_count - 1) WHERE id = ?', [c.post_id]);
-  res.json({ success: true });
+    await Post.findByIdAndUpdate(comment.post_id, { $inc: { comment_count: -1 } });
+    await comment.deleteOne();
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Delete failed' });
+  }
 });
 
 // ── GET /api/social/stats ─────────────────────────────────────
-router.get('/stats', optionalAuth, (req, res) => {
-  res.json({
-    total_posts:    get('SELECT COUNT(*) AS c FROM posts').c,
-    total_comments: get('SELECT COUNT(*) AS c FROM comments').c,
-    total_likes:    get('SELECT COUNT(*) AS c FROM post_likes').c,
-    active_fans:    get('SELECT COUNT(DISTINCT user_id) AS c FROM posts').c,
-  });
+router.get('/stats', optionalAuth, async (req, res) => {
+  try {
+    const [total_posts, total_comments, total_likes, active_fans] = await Promise.all([
+      Post.countDocuments(),
+      Comment.countDocuments(),
+      PostLike.countDocuments(),
+      Post.distinct('user_id').then(ids => ids.length),
+    ]);
+    res.json({ total_posts, total_comments, total_likes, active_fans });
+  } catch {
+    res.status(500).json({ error: 'Failed to load stats' });
+  }
 });
 
 export default router;

@@ -1,4 +1,4 @@
-# Deploying SOLACE: Netlify (frontend) + Render (backend)
+# Deploying KZ: Netlify (frontend) + Render (backend)
 
 ## Why two platforms?
 

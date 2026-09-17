@@ -1,69 +1,43 @@
 import { Router } from 'express';
-import { all } from '../db/database';
-import { requireArtist } from '../middleware/auth';
+import { Music, Track, User, serializeMusic, serializeTrack } from '../db/database.js';
+import { requireArtist } from '../middleware/auth.js';
 
 const router = Router();
 
-function toMusicItem(row, tracks = []) {
-  return {
-    id: row.id,
-    type: row.type,
-    title: row.title,
-    genre: row.genre,
-    year: row.year,
-    emoji: row.emoji,
-    desc: row.description,
-    download: Boolean(row.allow_download),
-    audioPath: row.filename ? `/uploads/${row.filename}` : null,
-    artistId: row.artist_id,
-    artistName: row.artist_name,
-    createdAt: row.created_at,
-    tracks
-  };
-}
+router.get('/dashboard', requireArtist, async (req, res) => {
+  const users = await User.find({}).sort({ createdAt: -1 }).lean();
+  const musicDocs = await Music.find({}).sort({ createdAt: -1 });
+  const music = [];
 
-router.get('/dashboard', requireArtist, (req, res) => {
-  const users = all(`
-    SELECT id, username AS name, username, email, role, avatar, created_at AS createdAt
-    FROM users
-    ORDER BY datetime(created_at) DESC
-  `);
-
-  const rows = all(`
-    SELECT m.*, u.username AS artist_name,
-           (SELECT filename FROM tracks t WHERE t.music_id=m.id ORDER BY t.track_number LIMIT 1) AS filename
-    FROM music m
-    JOIN users u ON u.id=m.artist_id
-    ORDER BY datetime(m.created_at) DESC
-  `);
-
-  const tracks = all(`
-    SELECT id, music_id AS musicId, track_number AS trackNumber, title, duration, filename
-    FROM tracks
-    ORDER BY track_number ASC
-  `);
-
-  const music = rows.map((row) => toMusicItem(
-    row,
-    tracks
-      .filter((track) => track.musicId === row.id)
-      .map((track) => ({
-        ...track,
-        audioPath: track.filename ? `/uploads/${track.filename}` : null
-      }))
-  ));
+  for (const item of musicDocs) {
+    const artist = await User.findOne({ id: item.artistId });
+    const tracks = await Track.find({ musicId: item.id }).sort({ trackNumber: 1 });
+    music.push({
+      ...serializeMusic(item, tracks),
+      artistName: artist?.username ?? null,
+      audioPath: tracks[0]?.filename ? `/uploads/${tracks[0].filename}` : null,
+    });
+  }
 
   res.json({
     stats: {
       totalUsers: users.length,
       totalSingles: music.filter((item) => item.type === 'single').length,
-      totalAlbums: music.filter((item) => item.type === 'album').length
+      totalAlbums: music.filter((item) => item.type === 'album').length,
     },
-    users,
+    users: users.map((user) => ({
+      id: user.id,
+      name: user.username,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+    })),
     music: {
       singles: music.filter((item) => item.type === 'single'),
-      albums: music.filter((item) => item.type === 'album')
-    }
+      albums: music.filter((item) => item.type === 'album'),
+    },
   });
 });
 

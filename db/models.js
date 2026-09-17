@@ -1,0 +1,101 @@
+import mongoose from 'mongoose';
+
+const { Schema, model } = mongoose;
+
+// ── Shared transform ──────────────────────────────────────────
+// Converts _id → id, removes __v from every model's JSON output
+const toJSON = {
+  virtuals: true,
+  transform: (_, ret) => {
+    ret.id = ret._id.toString();
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  },
+};
+
+// ── USER ──────────────────────────────────────────────────────
+const userSchema = new Schema({
+  username:      { type: String, required: true, unique: true, trim: true },
+  email:         { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password_hash: { type: String, required: true },
+  role:          { type: String, enum: ['fan', 'artist'], default: 'fan' },
+  avatar:        { type: String, default: '🎧' },
+  bio:           { type: String, default: '' },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+
+export const User = model('User', userSchema);
+
+// ── MUSIC ─────────────────────────────────────────────────────
+const musicSchema = new Schema({
+  type:           { type: String, enum: ['single', 'album'], required: true },
+  title:          { type: String, required: true, trim: true },
+  genre:          { type: String, default: '' },
+  year:           { type: Number },
+  emoji:          { type: String, default: '🎵' },
+  description:    { type: String, default: '' },
+  allow_download: { type: Boolean, default: true },
+  artist_id:      { type: Schema.Types.ObjectId, ref: 'User', required: true },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+
+export const Music = model('Music', musicSchema);
+
+// ── TRACK ─────────────────────────────────────────────────────
+const trackSchema = new Schema({
+  music_id:     { type: Schema.Types.ObjectId, ref: 'Music', required: true },
+  track_number: { type: Number, required: true },
+  title:        { type: String, required: true, trim: true },
+  duration:     { type: String, default: '0:00' },
+  filename:     { type: String, default: null },
+}, { toJSON });
+
+export const Track = model('Track', trackSchema);
+
+// ── STREAM ────────────────────────────────────────────────────
+const streamSchema = new Schema({
+  user_id:  { type: Schema.Types.ObjectId, ref: 'User', default: null },
+  track_id: { type: Schema.Types.ObjectId, ref: 'Track', required: true },
+}, { timestamps: { createdAt: 'streamed_at', updatedAt: false } });
+
+export const Stream = model('Stream', streamSchema);
+
+// ── DOWNLOAD ──────────────────────────────────────────────────
+const downloadSchema = new Schema({
+  user_id:  { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  music_id: { type: Schema.Types.ObjectId, ref: 'Music', required: true },
+}, { timestamps: { createdAt: 'downloaded_at', updatedAt: false } });
+
+export const Download = model('Download', downloadSchema);
+
+// ── POST ──────────────────────────────────────────────────────
+const postSchema = new Schema({
+  user_id:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  content:        { type: String, default: null },
+  image_filename: { type: String, default: null },
+  image_url:      { type: String, default: null },
+  post_type:      { type: String, enum: ['text', 'image'], default: 'text' },
+  like_count:     { type: Number, default: 0 },
+  comment_count:  { type: Number, default: 0 },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+
+export const Post = model('Post', postSchema);
+
+// ── POST LIKE ─────────────────────────────────────────────────
+const postLikeSchema = new Schema({
+  post_id: { type: Schema.Types.ObjectId, ref: 'Post', required: true },
+  user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false } });
+
+// Enforce one like per user per post
+postLikeSchema.index({ post_id: 1, user_id: 1 }, { unique: true });
+
+export const PostLike = model('PostLike', postLikeSchema);
+
+// ── COMMENT ───────────────────────────────────────────────────
+const commentSchema = new Schema({
+  post_id: { type: Schema.Types.ObjectId, ref: 'Post', required: true },
+  user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  content: { type: String, required: true, maxlength: 500, trim: true },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+
+export const Comment = model('Comment', commentSchema);
