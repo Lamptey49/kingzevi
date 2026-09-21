@@ -301,8 +301,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
 <header>
   <div class="logo">KIN<span>G</span>ZEVI</div>
   <nav class="nav-links">
-    <a onclick="goto('music')" class="keep">Music</a>
-    <a onclick="goto('albums')">Albums</a>
+    
     <a onclick="goto('community')" class="keep">Community</a>
   </nav>
   <div class="header-auth" id="header-guest">
@@ -311,9 +310,10 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
   </div>
   <div style="display:none" id="header-user">
     <div class="user-pill">
+      <a href="fan-dashboard.html" class="u-role" id="h-role">
       <span class="u-avatar" id="h-avatar">🎧</span>
       <span class="u-name" id="h-name"></span>
-      <span class="u-role fan" id="h-role"></span>
+      <span class="u-role fan" id="h-role"></span></a>
       <button class="btn-ghost-sm" onclick="logout()">Sign out</button>
     </div>
   </div>

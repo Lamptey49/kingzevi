@@ -987,7 +987,7 @@ async function saveProfile() {
   const btn=document.getElementById('save-profile-btn');
   btn.disabled=true; btn.textContent='Saving…';
   try {
-    const d=await api('PUT','/profile/me',{username,bio});
+    const d=await api('PUT','/auth/profile',{username,bio});
     // Update local user object
     me.username=d.user.username; me.bio=d.user.bio;
     // Refresh the modal
@@ -1017,7 +1017,7 @@ async function uploadAvatar(input) {
 
   try {
     const fd=new FormData(); fd.append('avatar',file);
-    const d=await api('POST','/profile/me/avatar',fd,true);
+    const d=await api('POST','/auth/avatar',fd,true);
 
     // Update me object
     me.avatar_url=d.user.avatar_url;
