@@ -16,13 +16,15 @@ const toJSON = {
 
 // ── USER ──────────────────────────────────────────────────────
 const userSchema = new Schema({
-  username:      { type: String, required: true, unique: true, trim: true },
-  email:         { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password_hash: { type: String, required: true },
-  role:          { type: String, enum: ['fan', 'artist'], default: 'fan' },
-  avatar:        { type: String, default: '🎧' },
-  bio:           { type: String, default: '' },
-}, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+  username:         { type: String, required: true, unique: true, trim: true },
+  email:            { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password_hash:    { type: String, required: true },
+  role:             { type: String, enum: ['fan', 'artist'], default: 'fan' },
+  avatar:           { type: String, default: '🎧' },       // emoji fallback
+  avatar_url:       { type: String, default: null },        // Cloudinary profile picture
+  avatar_public_id: { type: String, default: null },        // for deletion
+  bio:              { type: String, default: '', maxlength: 200 },
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }, toJSON });
 
 export const User = model('User', userSchema);
 
@@ -69,13 +71,13 @@ export const Download = model('Download', downloadSchema);
 
 // ── POST ──────────────────────────────────────────────────────
 const postSchema = new Schema({
-  user_id:        { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  content:        { type: String, default: null },
-  image_filename: { type: String, default: null },
-  image_url:      { type: String, default: null },
-  post_type:      { type: String, enum: ['text', 'image'], default: 'text' },
-  like_count:     { type: Number, default: 0 },
-  comment_count:  { type: Number, default: 0 },
+  user_id:          { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  content:          { type: String, default: null },
+  image_url:        { type: String, default: null },   // Cloudinary secure_url
+  image_public_id:  { type: String, default: null },   // Cloudinary public_id (for deletion)
+  post_type:        { type: String, enum: ['text', 'image'], default: 'text' },
+  like_count:       { type: Number, default: 0 },
+  comment_count:    { type: Number, default: 0 },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
 
 export const Post = model('Post', postSchema);

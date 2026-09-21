@@ -1,0 +1,163 @@
+import { Router } from 'express';
+import multer      from 'multer';
+import { User }    from '../db/models.js';
+import { Post, PostLike } from '../db/models.js';
+import { requireAuth }    from '../middleware/auth.js';
+import { uploadAvatar, deleteImage } from '../lib/cloudinary.js';
+
+const router = Router();
+
+// ── Avatar upload — memory only, no disk ──────────────────────
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 5 * 1024 * 1024 },   // 5 MB cap for avatars
+  fileFilter: (req, file, cb) => {
+    ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Profile picture must be jpg, png, gif or webp'));
+  },
+});
+
+// ── Serialise a public user object ─────────────────────────────
+function serializeUser(user) {
+  return {
+    id:         user._id?.toString() ?? user.id,
+    username:   user.username,
+    role:       user.role,
+    avatar:     user.avatar,
+    avatar_url: user.avatar_url ?? null,
+    bio:        user.bio ?? '',
+    created_at: user.created_at,
+  };
+}
+
+// ── Serialise a post for the profile feed ─────────────────────
+function serializePost(post) {
+  return {
+    id:            post._id.toString(),
+    content:       post.content   ?? null,
+    image_url:     post.image_url ?? null,
+    post_type:     post.post_type,
+    like_count:    post.like_count,
+    comment_count: post.comment_count,
+    created_at:    post.created_at,
+  };
+}
+
+// ── GET /api/profile/:username ─────────────────────────────────
+// Public profile — anyone can view
+router.get('/:username', async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username })
+      .select('-password_hash -email -avatar_public_id');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const userPosts = await Post.find({ user_id: user._id })
+      .sort({ created_at: -1 })
+      .limit(24)
+      .lean();
+
+    const postIds      = userPosts.map(p => p._id);
+    const likesReceived = await PostLike.countDocuments({ post_id: { $in: postIds } });
+
+    res.json({
+      user:  serializeUser(user),
+      stats: { posts: userPosts.length, likes_received: likesReceived },
+      posts: userPosts.map(serializePost),
+    });
+  } catch (err) {
+    console.error('GET /profile/:username error:', err);
+    res.status(500).json({ error: 'Failed to load profile' });
+  }
+});
+
+// ── PUT /api/profile/me ────────────────────────────────────────
+// Update bio and/or username
+router.put('/me', requireAuth, async (req, res) => {
+  try {
+    const { bio, username } = req.body;
+    const updates = {};
+
+    if (bio !== undefined) {
+      if (bio.length > 200) return res.status(400).json({ error: 'Bio must be under 200 characters' });
+      updates.bio = bio.trim();
+    }
+
+    if (username !== undefined) {
+      const trimmed = username.trim();
+      if (!trimmed)         return res.status(400).json({ error: 'Username cannot be empty' });
+      if (trimmed.length < 2) return res.status(400).json({ error: 'Username must be at least 2 characters' });
+      if (!/^[a-zA-Z0-9_]+$/.test(trimmed))
+        return res.status(400).json({ error: 'Username may only contain letters, numbers and underscores' });
+
+      // Check uniqueness (excluding self)
+      const conflict = await User.findOne({ username: trimmed, _id: { $ne: req.user.id } });
+      if (conflict) return res.status(409).json({ error: 'Username already taken' });
+      updates.username = trimmed;
+    }
+
+    if (!Object.keys(updates).length)
+      return res.status(400).json({ error: 'Nothing to update' });
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true, runValidators: true },
+    ).select('-password_hash -avatar_public_id');
+
+    res.json({ user: serializeUser(updated) });
+  } catch (err) {
+    console.error('PUT /profile/me error:', err);
+    res.status(500).json({ error: err.message ?? 'Update failed' });
+  }
+});
+
+// ── POST /api/profile/me/avatar ────────────────────────────────
+// Upload / replace profile picture
+router.post('/me/avatar', requireAuth, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+
+    const user = await User.findById(req.user.id);
+    if (!user)  return res.status(404).json({ error: 'User not found' });
+
+    // Delete previous avatar from Cloudinary before uploading the new one
+    if (user.avatar_public_id) await deleteImage(user.avatar_public_id);
+
+    const result = await uploadAvatar(req.file.buffer);
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { avatar_url: result.secure_url, avatar_public_id: result.public_id } },
+      { new: true },
+    ).select('-password_hash -avatar_public_id');
+
+    res.json({ user: serializeUser(updated) });
+  } catch (err) {
+    console.error('POST /profile/me/avatar error:', err);
+    res.status(500).json({ error: err.message ?? 'Avatar upload failed' });
+  }
+});
+
+// ── DELETE /api/profile/me/avatar ─────────────────────────────
+// Remove profile picture and fall back to emoji
+router.delete('/me/avatar', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    await deleteImage(user.avatar_public_id);
+
+    const updated = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: { avatar_url: null, avatar_public_id: null } },
+      { new: true },
+    ).select('-password_hash -avatar_public_id');
+
+    res.json({ user: serializeUser(updated) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove avatar' });
+  }
+});
+
+export default router;

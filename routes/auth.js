@@ -1,9 +1,23 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import { User } from '../db/models.js';
+import bcrypt      from 'bcryptjs';
+import { User }    from '../db/models.js';
 import { signToken, requireAuth } from '../middleware/auth.js';
 
 const router = Router();
+
+// Consistent public shape for user objects
+function serializeUser(user) {
+  return {
+    id:         user._id?.toString() ?? user.id,
+    username:   user.username,
+    email:      user.email,
+    role:       user.role,
+    avatar:     user.avatar,
+    avatar_url: user.avatar_url ?? null,
+    bio:        user.bio ?? '',
+    created_at: user.created_at,
+  };
+}
 
 // ── POST /api/auth/register ───────────────────────────────────
 router.post('/register', async (req, res) => {
@@ -29,8 +43,9 @@ router.post('/register', async (req, res) => {
       username, email, password_hash: hash, role: userRole, avatar: userAvatar,
     });
 
-    const payload = { id: user.id, username, email, role: userRole, avatar: userAvatar };
-    res.status(201).json({ token: signToken(payload), user: payload });
+    const serialized = serializeUser(user);
+    const token = signToken({ id: user.id, username, email, role: userRole, avatar: userAvatar });
+    res.status(201).json({ token, user: serialized });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed' });
@@ -48,8 +63,13 @@ router.post('/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user.password_hash)))
       return res.status(401).json({ error: 'Invalid email or password' });
 
-    const payload = { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar };
-    res.json({ token: signToken(payload), user: payload });
+    const serialized = serializeUser(user);
+    const token = signToken({
+      id: user.id, username: user.username,
+      email: user.email, role: user.role,
+      avatar: user.avatar,
+    });
+    res.json({ token, user: serialized });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -59,9 +79,9 @@ router.post('/login', async (req, res) => {
 // ── GET /api/auth/me ──────────────────────────────────────────
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password_hash');
+    const user = await User.findById(req.user.id).select('-password_hash -avatar_public_id');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ user: { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio, created_at: user.created_at } });
+    res.json({ user: serializeUser(user) });
   } catch {
     res.status(500).json({ error: 'Server error' });
   }

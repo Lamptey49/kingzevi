@@ -12,8 +12,14 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: MONGODB_URI
-        sync: false        # paste your Atlas URI in the Render dashboard
+        sync: false          # paste your Atlas URI in the Render dashboard
       - key: DB_NAME
         value: solace
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false          # from cloudinary.com → Dashboard
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
       - key: ALLOWED_ORIGIN
-        sync: false        # paste your Netlify URL after deploy
+        sync: false          # your Netlify URL
