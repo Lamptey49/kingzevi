@@ -545,8 +545,8 @@ const API = window.location.origin;
 
 // ── STATE ─────────────────────────────────────────────────────
 let me = null;
-let token = localStorage.getItem('sl_tok');
-let postPage = 1, postPages = 1;
+let token = (localStorage.getItem('st') || localStorage.getItem('sl_tok'));
+let postPage = 0, postPages = 1, postsLoading = false, feedGeneration = 0, nextCursor = null;
 let composeMode = 'text';
 let selectedFile = null;
 let selectedRole = 'fan';
@@ -560,6 +560,7 @@ async function api(method, path, body, isForm) {
   };
   const r = await fetch(API + '/api' + path, {
     method,
+    signal: AbortSignal.timeout(isForm ? 120000 : 30000),
     headers: h,
     body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
   });
@@ -629,11 +630,11 @@ async function doRegister() {
 }
 function applyUser(user, tok) {
   me = user; token = tok;
-  localStorage.setItem('sl_tok', tok);
+  localStorage.setItem('st', tok); localStorage.removeItem('sl_tok');
 }
 function logout() {
   me = null; token = null;
-  localStorage.removeItem('sl_tok');
+  localStorage.removeItem('sl_tok'); localStorage.removeItem('st');
   syncUI(); loadPosts(1);
   toast('Signed out. See you soon!');
 }
@@ -679,7 +680,7 @@ function renderAvatarIn(elId, emoji, url) {
 
 // Universal .uav element builder
 function makeAvEl(emoji, url, cls='') {
-  if (url) return `<div class="uav ${cls}"><img src="${esc(url)}" alt="" loading="lazy"/></div>`;
+  if (url) return `<div class="uav ${cls}"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"/></div>`;
   return `<div class="uav ${cls}">${esc(emoji||'🎧')}</div>`;
 }
 
@@ -753,28 +754,50 @@ async function submitPost() {
 
 // ── POSTS ─────────────────────────────────────────────────────
 async function loadPosts(page=1) {
-  if (page===1) { clearFeed(true); document.getElementById('feed-sub').textContent='Loading…'; }
+  if (page !== 1 && (postsLoading || postPage >= postPages)) return;
+  const generation = page === 1 ? ++feedGeneration : feedGeneration;
+  postsLoading = true;
+  const feed = document.getElementById('feed-list');
+  const btn = document.getElementById('load-more-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading?';
+  document.getElementById('feed-sub').textContent = 'Loading?';
   try {
-    const d=await api('GET',`/social/posts?page=${page}&limit=10`);
-    postPage=d.page; postPages=d.pages;
-    if (page===1) clearFeed(false);
-    d.posts.forEach(p=>appendPost(buildPostEl(p)));
-    if (page===1&&d.posts.length===0) showEmpty();
-    document.getElementById('feed-sub').textContent=d.total+' posts from the community';
-    document.getElementById('load-more-btn').style.display=postPage<postPages?'inline-flex':'none';
-  } catch {
-    clearFeed(false);
-    document.getElementById('feed-list').insertAdjacentHTML('beforeend','<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Could not load posts</div><div class="empty-sub">Make sure the server is running, then refresh.</div></div>');
+    const cursor = page > 1 && nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
+    const d = await api('GET', '/social/posts?page=' + page + '&limit=10' + cursor);
+    if (generation !== feedGeneration) return;
+    if (!Array.isArray(d.posts)) throw new Error('Invalid posts response');
+    if (page === 1) feed.querySelectorAll('.post-card,.empty,.empty-state,.loading-state').forEach(el => el.remove());
+    feed.querySelector('.feed-error')?.remove();
+    for (const post of d.posts) {
+      if (!document.getElementById('post-' + post.id)) appendPost(buildPostEl(post));
+    }
+    postPage = page;
+    postPages = d.has_more === false || d.posts.length === 0 ? page : (d.has_more ? page + 1 : Number(d.pages) || page);
+    nextCursor = d.next_cursor || null;
+    clearSkel(); document.getElementById('feed-sub').textContent = d.total + ' posts from the community';
+    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>No posts yet. Be the first to share!</p></div>');
+  } catch (error) {
+    if (generation !== feedGeneration) return;
+    feed.querySelectorAll('.loading-state,.feed-error').forEach(el => el.remove());
+    feed.insertAdjacentHTML('beforeend', '<div class="feed-error" role="alert">Could not load posts. <button onclick="loadPosts(' + page + ')">Try again</button></div>');
+    document.getElementById('feed-sub').textContent = 'Could not refresh posts';
+  } finally {
+    if (generation === feedGeneration) {
+      clearSkel();
+      postsLoading = false;
+      btn.disabled = false;
+      btn.textContent = 'Load more posts';
+      btn.style.display = postPage > 0 && postPage < postPages ? 'inline-flex' : 'none';
+    }
   }
 }
-async function loadMorePosts() {
-  const btn=document.getElementById('load-more-btn'); btn.textContent='Loading…';
-  await loadPosts(postPage+1); btn.textContent='Load more posts';
-}
+async function loadMorePosts() { return loadPosts(postPage + 1); }
+
 function clearSkel() { const s=document.getElementById('feed-skel'); if(s) s.style.display='none'; }
 function clearFeed(showSkel) {
   clearSkel();
-  if (showSkel) { document.getElementById('feed-skel').style.display='block'; }
+  if (showSkel && document.getElementById('feed-skel')) { document.getElementById('feed-skel').style.display='block'; }
   document.getElementById('feed-list').querySelectorAll('.post-card,.empty').forEach(e=>e.remove());
 }
 function prependPost(el) {
@@ -809,7 +832,7 @@ function buildPostEl(post) {
       ${isOwn?`<button class="post-del" onclick="deletePost('${post.id}')" title="Delete">⋯</button>`:''}
     </div>
     ${post.content?`<div class="post-text">${escNl(post.content)}</div>`:''}
-    ${post.image_url?`<img class="post-img" src="${esc(post.image_url)}" alt="" loading="lazy" onclick="openLightbox('${esc(post.image_url)}')"/>`:''}
+    ${post.image_url?`<img class="post-img" src="${esc(post.image_url)}" alt="" loading="lazy" decoding="async" onclick="openLightbox('${esc(post.image_url)}')"/>`:''}
     <div class="post-actions">
       <button class="act-btn${post.liked_by_me?' liked':''}" id="lb-${post.id}" onclick="toggleLike('${post.id}')">
         ${heartSvg(post.liked_by_me)}<span id="lc-${post.id}">${post.like_count||0}</span>
@@ -960,7 +983,7 @@ async function openProfile(username) {
       grid.innerHTML=d.posts.map(p=>`
         <div class="pm-post-thumb${p.image_url?'':' text-only'}" onclick="openLightbox('${p.image_url||''}','${esc(p.content||'')}',${!p.image_url})">
           ${p.image_url
-            ? `<img src="${esc(p.image_url)}" alt="" loading="lazy"/>`
+            ? `<img src="${esc(p.image_url)}" alt="" loading="lazy" decoding="async"/>`
             : `<p>${esc(p.content||'')}</p>`}
         </div>`).join('');
     }

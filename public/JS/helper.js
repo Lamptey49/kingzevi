@@ -10,12 +10,12 @@ let trackCount = 0;
 let selectedRole = 'fan';
 let composeMode = null; // 'text' | 'image'
 let selectedImageFile = null;
-let postPage = 1, postPages = 1;
+let postPage = 0, postPages = 1, postsLoading = false, feedGeneration = 0, nextCursor = null;
 
 // ── API ──
 async function api(method, path, body, isForm) {
   const h = { ...(token ? {'Authorization':'Bearer '+token} : {}), ...(!isForm && body ? {'Content-Type':'application/json'} : {}) };
-  const r = await fetch(BASE+'/api'+path, { method, headers:h, body: body ? (isForm?body:JSON.stringify(body)) : undefined });
+  const r = await fetch(BASE+'/api'+path, { method, signal: AbortSignal.timeout(isForm ? 120000 : 30000), headers:h, body: body ? (isForm?body:JSON.stringify(body)) : undefined });
   const d = await r.json().catch(()=>({}));
   if (!r.ok) throw new Error(d.error||'Error');
   return d;
@@ -28,8 +28,11 @@ async function init() {
     catch { token=null; localStorage.removeItem('st'); }
   }
   updateUI();
-  await Promise.all([loadMusic(), loadSocialStats()]);
-  await loadPosts(1);
+  await Promise.allSettled([
+    document.getElementById('posts-feed') ? loadPosts(1) : Promise.resolve(),
+    document.getElementById('ss-posts') ? loadSocialStats() : Promise.resolve(),
+    document.getElementById('singles-grid') ? loadMusic() : Promise.resolve(),
+  ]);
 }
 
 // ── AUTH ──
@@ -79,23 +82,25 @@ function logout() {
 }
 function updateUI() {
   const loggedIn = !!me;
+  const isArtist = me?.role === 'artist';
+  if (document.getElementById('upload-gate')) document.getElementById('upload-gate').style.display = isArtist ? 'none' : 'block';
+  if (document.getElementById('upload-panel')) document.getElementById('upload-panel').style.display = isArtist ? 'block' : 'none';
   document.getElementById('header-guest').style.display = loggedIn ? 'none' : 'flex';
   document.getElementById('header-user').style.display = loggedIn ? 'block' : 'none';
   if (me) {
-    document.getElementById('h-avatar').textContent = me.avatar||'🎧';
+    document.getElementById('h-avatar').innerHTML = avatarMarkup(me);
     document.getElementById('h-name').textContent = me.username;
     const roleEl = document.getElementById('h-role');
     roleEl.textContent = me.role;
     roleEl.className = 'u-role ' + (me.role==='artist'?'artist':'fan');
-    document.getElementById('composer-av').textContent = me.avatar||'🎧';
+    const composer = document.getElementById('composer-av');
+    if (composer) composer.innerHTML = avatarMarkup(me);
   }
-  const isArtist = me && me.role==='artist';
-  document.getElementById('upload-gate').style.display = isArtist ? 'none' : 'block';
-  document.getElementById('upload-panel').style.display = isArtist ? 'block' : 'none';
-  document.getElementById('composer').style.display = loggedIn ? 'block' : 'none';
-  document.getElementById('feed-login-prompt').style.display = loggedIn ? 'none' : 'block';
-  document.getElementById('sidebar-login').style.display = loggedIn ? 'none' : 'block';
-  renderSingles(allSingles); renderAlbums(allAlbums);
+  if (document.getElementById('composer')) document.getElementById('composer').style.display = loggedIn ? 'block' : 'none';
+  if (document.getElementById('feed-login-prompt')) document.getElementById('feed-login-prompt').style.display = loggedIn ? 'none' : 'block';
+  if (document.getElementById('sidebar-login')) document.getElementById('sidebar-login').style.display = loggedIn ? 'none' : 'block';
+  if (document.getElementById('singles-grid')) renderSingles(allSingles);
+  if (document.getElementById('albums-grid')) renderAlbums(allAlbums);
 }
 
 // ── MUSIC ──
@@ -104,15 +109,14 @@ async function loadMusic() {
     const [s,a] = await Promise.all([api('GET','/music?type=single'), api('GET','/music?type=album')]);
     allSingles=s.music; allAlbums=a.music;
     renderSingles(allSingles); renderAlbums(allAlbums);
-    document.getElementById('stat-tracks').textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
-    document.getElementById('stat-albums').textContent = allAlbums.length;
-    document.getElementById('stat-streams').textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
+    if (document.getElementById('stat-tracks')) document.getElementById('stat-tracks').textContent = allSingles.length + allAlbums.reduce((n,a)=>n+(a.track_count||0),0);
+    if (document.getElementById('stat-albums')) document.getElementById('stat-albums').textContent = allAlbums.length;
+    if (document.getElementById('stat-streams')) document.getElementById('stat-streams').textContent = allSingles.reduce((n,s)=>n+(s.stream_count||0),0);
   } catch { document.getElementById('singles-grid').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load music. Is the server running?</p></div>'; }
 }
 async function loadSocialStats() {
   try {
     const d=await api('GET','/social/stats');
-    document.getElementById('stat-posts').textContent = d.total_posts;
     document.getElementById('ss-posts').textContent = d.total_posts;
     document.getElementById('ss-comments').textContent = d.total_comments;
     document.getElementById('ss-likes').textContent = d.total_likes;
@@ -337,19 +341,46 @@ async function submitPost() {
 
 // ── SOCIAL: FEED ──
 async function loadPosts(page=1) {
-  if (page===1) document.getElementById('posts-feed').innerHTML='<div class="loading-state"><div class="spinner"></div>Loading posts…</div>';
+  if (!document.getElementById('posts-feed')) return;
+  if (page !== 1 && (postsLoading || postPage >= postPages)) return;
+  const generation = page === 1 ? ++feedGeneration : feedGeneration;
+  postsLoading = true;
+  const feed = document.getElementById('posts-feed');
+  const btn = document.getElementById('load-more');
+  btn.disabled = true;
+  btn.textContent = 'Loading?';
+
   try {
-    const d=await api('GET','/social/posts?page='+page+'&limit=10');
-    postPage=d.page; postPages=d.pages;
-    if(page===1) document.getElementById('posts-feed').innerHTML='';
-    d.posts.forEach(p=>appendPost(p));
-    document.getElementById('load-more').style.display=postPage<postPages?'block':'none';
-    if(page===1&&d.posts.length===0) document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p class="empty-text">No posts yet. Be the first to share!</p></div>';
-  } catch(e) { document.getElementById('posts-feed').innerHTML='<div class="empty-state"><div class="empty-icon">⚠️</div><p class="empty-text">Could not load posts.</p></div>'; }
+    const cursor = page > 1 && nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
+    const d = await api('GET', '/social/posts?page=' + page + '&limit=10' + cursor);
+    if (generation !== feedGeneration) return;
+    if (!Array.isArray(d.posts)) throw new Error('Invalid posts response');
+    if (page === 1) feed.querySelectorAll('.post-card,.empty,.empty-state,.loading-state').forEach(el => el.remove());
+    feed.querySelector('.feed-error')?.remove();
+    for (const post of d.posts) {
+      if (!document.getElementById('post-' + post.id)) appendPost(post);
+    }
+    postPage = page;
+    postPages = d.has_more === false || d.posts.length === 0 ? page : (d.has_more ? page + 1 : Number(d.pages) || page);
+    nextCursor = d.next_cursor || null;
+
+    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>No posts yet. Be the first to share!</p></div>');
+  } catch (error) {
+    if (generation !== feedGeneration) return;
+    feed.querySelectorAll('.loading-state,.feed-error').forEach(el => el.remove());
+    feed.insertAdjacentHTML('beforeend', '<div class="feed-error" role="alert">Could not load posts. <button onclick="loadPosts(' + page + ')">Try again</button></div>');
+
+  } finally {
+    if (generation === feedGeneration) {
+
+      postsLoading = false;
+      btn.disabled = false;
+      btn.textContent = 'Load more posts';
+      btn.style.display = postPage > 0 && postPage < postPages ? 'inline-flex' : 'none';
+    }
+  }
 }
-async function loadMorePosts() {
-  await loadPosts(postPage+1);
-}
+async function loadMorePosts() { return loadPosts(postPage + 1); }
 
 function prependPost(post) {
   const el=buildPostEl(post);
@@ -369,7 +400,7 @@ function buildPostEl(post) {
   div.className='post-card'; div.id='post-'+post.id;
   div.innerHTML=`
     <div class="post-header">
-      <div class="post-avatar">${esc(post.avatar||'🎧')}</div>
+      <div class="post-avatar">${avatarMarkup(post)}</div>
       <div class="post-meta">
         <div class="post-author">
           ${esc(post.username)}
@@ -380,7 +411,7 @@ function buildPostEl(post) {
       ${isOwn?`<button class="post-delete" onclick="deletePost('${post.id}')" title="Delete">🗑</button>`:''}
     </div>
     ${post.content?`<div class="post-content">${escNl(post.content)}</div>`:''}
-    ${post.image_url?`<img class="post-image" src="${esc(post.image_url)}" alt="Post image" loading="lazy"/>`:''}
+    ${post.image_url?`<img class="post-image" src="${esc(post.image_url)}" alt="Post image" loading="lazy" decoding="async"/>`:''}
     <div class="post-footer">
       <button class="post-action${post.liked_by_me?' liked':''}" id="like-btn-${post.id}" onclick="toggleLike('${post.id}')">
         <svg viewBox="0 0 24 24"><path d="${post.liked_by_me?'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z':'M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z'}"/></svg>
@@ -395,7 +426,7 @@ function buildPostEl(post) {
     <div class="comments-section hidden" id="comments-${post.id}">
       <div id="comments-list-${post.id}"><div class="loading-state" style="padding:14px;font-size:.8rem"><div class="spinner" style="width:20px;height:20px;border-width:2px"></div></div></div>
       ${me?`<div class="comment-composer">
-        <div class="comment-avatar">${esc(me.avatar||'🎧')}</div>
+        <div class="comment-avatar">${avatarMarkup(me)}</div>
         <input type="text" class="comment-input" id="ci-${post.id}" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')sendComment('${post.id}')"/>
         <button class="comment-send" onclick="sendComment('${post.id}')">↑</button>
       </div>`:'<p style="font-size:.78rem;color:var(--muted);margin-top:8px"><span style="color:var(--gold);cursor:pointer" onclick="openAuth(\'login\')">Sign in</span> to comment</p>'}
@@ -431,7 +462,7 @@ async function loadComments(postId) {
     if(!d.comments.length) { list.innerHTML='<p style="font-size:.78rem;color:var(--muted);margin-bottom:8px">No comments yet. Be first!</p>'; return; }
     list.innerHTML=d.comments.map(c=>`
       <div class="comment-item" id="cmt-${c.id}">
-        <div class="comment-avatar">${esc(c.avatar||'🎧')}</div>
+        <div class="comment-avatar">${avatarMarkup(c)}</div>
         <div class="comment-body">
           <div class="comment-author">
             ${esc(c.username)}
@@ -457,7 +488,7 @@ async function sendComment(postId) {
     const el=document.createElement('div');
     el.className='comment-item'; el.id='cmt-'+d.comment.id;
     el.innerHTML=`
-      <div class="comment-avatar">${esc(d.comment.avatar||'🎧')}</div>
+      <div class="comment-avatar">${avatarMarkup(d.comment)}</div>
       <div class="comment-body">
         <div class="comment-author">${esc(d.comment.username)} <span class="post-role-tag ${d.comment.role==='artist'?'artist':''}"> ${d.comment.role}</span>
           <button class="comment-del" onclick="deleteComment('${d.comment.id}','${postId}')">✕</button>
@@ -494,6 +525,10 @@ async function deleteComment(id, postId) {
 }
 
 // ── UTILS ──
+function avatarMarkup(user) {
+  const url = user.avatar_url || (/^(https?:|data:image\/|\/)/.test(user.avatar || '') ? user.avatar : null);
+  return url ? `<img src="${esc(url)}" alt="Profile picture" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.replaceWith(document.createTextNode('??'))"/>` : esc(user.avatar || '??');
+}
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escNl(s) { return esc(s).replace(/\n/g,'<br>'); }
 function goto(id) { document.getElementById(id)?.scrollIntoView({behavior:'smooth'}); }
@@ -516,8 +551,8 @@ document.getElementById('r-pass').addEventListener('keydown',e=>{ if(e.key==='En
 
 // ── DRAG DROP (audio) ──
 const dz=document.getElementById('s-drop');
-['dragover','dragenter'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
-['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
-dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
+['dragover','dragenter'].forEach(ev=>dz?.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag-over');}));
+['dragleave','drop'].forEach(ev=>dz?.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag-over');}));
+dz?.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f) document.getElementById('s-drop-label').textContent='✓ '+f.name;});
 
 init();

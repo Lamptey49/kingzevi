@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Router }        from 'express';
 import multer            from 'multer';
 import { Post, PostLike, Comment } from '../db/models.js';
@@ -57,19 +58,31 @@ function serializeComment(c) {
 // ── GET /api/social/posts ──────────────────────────────────────
 router.get('/posts', optionalAuth, async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 50));
     const page  = Math.max(parseInt(req.query.page,  10) || 1,  1);
 
-    const [posts, total] = await Promise.all([
-      Post.find()
+    let filter = {};
+    if (req.query.cursor) {
+      try {
+        const cursor = JSON.parse(Buffer.from(req.query.cursor, 'base64url').toString());
+        const date = new Date(cursor.created_at);
+        if (!mongoose.isValidObjectId(cursor.id) || !Number.isFinite(date.getTime())) throw new Error();
+        filter = { $or: [{ created_at: { $lt: date } }, { created_at: date, _id: { $lt: cursor.id } }] };
+      } catch { return res.status(400).json({ error: 'Invalid posts cursor' }); }
+    }
+    const [rows, total] = await Promise.all([
+      Post.find(filter)
         .populate('user_id', 'username avatar avatar_url role')
-        .sort({ created_at: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
+        .sort({ created_at: -1, _id: -1 })
+        .skip(req.query.cursor ? 0 : (page - 1) * limit)
+        .limit(limit + 1)
         .lean(),
       Post.countDocuments(),
     ]);
 
+    const posts = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const last = posts.at(-1);
     let likedSet = new Set();
     if (req.user) {
       const likes = await PostLike.find({
@@ -82,6 +95,8 @@ router.get('/posts', optionalAuth, async (req, res) => {
     res.json({
       posts: posts.map(p => serializePost(p, likedSet.has(p._id.toString()))),
       total,
+      has_more: hasMore,
+      next_cursor: hasMore && last ? Buffer.from(JSON.stringify({ created_at: last.created_at, id: last._id })).toString('base64url') : null,
       page,
       pages: Math.ceil(total / limit),
     });

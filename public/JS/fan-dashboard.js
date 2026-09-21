@@ -5,7 +5,7 @@ function buildApiUrl(path) {
   const base = String(window.__APP_CONFIG__?.apiBaseUrl || window.API_BASE_URL || '').replace(/\/$/, '');
   const clean = String(path || '').replace(/^\/+/, '');
   if (!base) return `/api/${clean}`;
-  return `${base}/${clean}`;
+  return `${base.replace(/\/api$/, '')}/api/${clean}`;
 }
 
 async function api(path, options = {}) {
@@ -16,6 +16,7 @@ async function api(path, options = {}) {
 
   const res = await fetch(buildApiUrl(path), {
     method: options.method || 'GET',
+    signal: AbortSignal.timeout(isFormData ? 120000 : 30000),
     headers,
     body: options.body ? (isFormData ? options.body : JSON.stringify(options.body)) : undefined
   });
@@ -50,7 +51,11 @@ function renderAvatar(value, element) {
   if (!element) return;
   const safeValue = value || '🎧';
   if (safeValue.startsWith('data:') || safeValue.startsWith('http') || safeValue.startsWith('/')) {
-    element.innerHTML = `<img src="${safeValue}" alt="Avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />`;
+    const img = document.createElement('img');
+    img.src = safeValue;
+    img.alt = 'Profile picture';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+    element.replaceChildren(img);
     return;
   }
   element.textContent = safeValue;
@@ -58,7 +63,7 @@ function renderAvatar(value, element) {
 
 function applyUserToPage(user) {
   fanUser = user;
-  renderAvatar(user.avatar, document.getElementById('fan-avatar-preview'));
+  renderAvatar(user.avatar_url || user.avatar, document.getElementById('fan-avatar-preview'));
   document.getElementById('fan-card-name').textContent = user.username || 'Your profile';
   document.getElementById('fan-card-role').textContent = user.role === 'artist' ? 'Artist' : 'Fan';
   document.getElementById('fan-card-email').textContent = user.email || '—';
@@ -127,7 +132,9 @@ async function saveProfile() {
 
     const avatarFile = document.getElementById('profile-avatar').files[0];
     if (avatarFile) {
-      payload.avatar = await readFileAsDataUrl(avatarFile);
+      if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(avatarFile.type) || avatarFile.size > 5 * 1024 * 1024) {
+        throw new Error('Choose a JPG, PNG, GIF or WebP image under 5 MB.');
+      }
     }
 
     const data = await api('/auth/profile', {
@@ -135,6 +142,13 @@ async function saveProfile() {
       body: payload
     });
 
+    if (avatarFile) {
+      const form = new FormData();
+      form.append('avatar', avatarFile);
+      const uploaded = await api('/auth/avatar', { method: 'POST', body: form });
+      data.user = uploaded.user;
+      document.getElementById('profile-avatar').value = '';
+    }
     if (data.user) {
       fanUser = data.user;
       applyUserToPage(data.user);

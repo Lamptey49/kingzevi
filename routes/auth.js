@@ -146,8 +146,8 @@ router.post('/avatar', requireAuth, upload.single('avatar'), async (req, res) =>
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Delete old Cloudinary avatar before uploading the new one
-    if (user.avatar_public_id) await deleteImage(user.avatar_public_id);
+    // Keep the current picture available until its replacement is saved.
+    const previousAvatar = user.avatar_public_id;
 
     const result  = await uploadAvatar(req.file.buffer);
     const updated = await User.findByIdAndUpdate(
@@ -155,6 +155,8 @@ router.post('/avatar', requireAuth, upload.single('avatar'), async (req, res) =>
       { $set: { avatar_url: result.secure_url, avatar_public_id: result.public_id } },
       { new: true },
     ).select('-password_hash -avatar_public_id');
+
+    await deleteImage(previousAvatar);
 
     res.json({ user: serializeUser(updated) });
   } catch (err) {

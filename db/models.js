@@ -40,6 +40,8 @@ const musicSchema = new Schema({
   artist_id:      { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
 
+musicSchema.index({ type: 1, created_at: -1 });
+
 export const Music = model('Music', musicSchema);
 
 // ── TRACK ─────────────────────────────────────────────────────
@@ -51,6 +53,8 @@ const trackSchema = new Schema({
   filename:     { type: String, default: null },
 }, { toJSON });
 
+trackSchema.index({ music_id: 1, track_number: 1 });
+
 export const Track = model('Track', trackSchema);
 
 // ── STREAM ────────────────────────────────────────────────────
@@ -58,6 +62,8 @@ const streamSchema = new Schema({
   user_id:  { type: Schema.Types.ObjectId, ref: 'User', default: null },
   track_id: { type: Schema.Types.ObjectId, ref: 'Track', required: true },
 }, { timestamps: { createdAt: 'streamed_at', updatedAt: false } });
+
+streamSchema.index({ track_id: 1 });
 
 export const Stream = model('Stream', streamSchema);
 
@@ -80,6 +86,9 @@ const postSchema = new Schema({
   comment_count:    { type: Number, default: 0 },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
 
+postSchema.index({ created_at: -1, _id: -1 });
+postSchema.index({ user_id: 1, created_at: -1, _id: -1 });
+
 export const Post = model('Post', postSchema);
 
 // ── POST LIKE ─────────────────────────────────────────────────
@@ -99,5 +108,7 @@ const commentSchema = new Schema({
   user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   content: { type: String, required: true, maxlength: 500, trim: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
+
+commentSchema.index({ post_id: 1, created_at: 1 });
 
 export const Comment = model('Comment', commentSchema);

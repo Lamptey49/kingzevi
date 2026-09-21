@@ -72,19 +72,18 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const ids = music.map(m => m._id);
 
-    // Batch-fetch tracks and stream counts for all music items
-    const [allTracks, streamAgg] = await Promise.all([
-      Track.find({ music_id: { $in: ids } }).sort({ track_number: 1 }).lean(),
-      Stream.aggregate([
-        { $lookup: { from: 'tracks', localField: 'track_id', foreignField: '_id', as: 'track' } },
-        { $unwind: '$track' },
-        { $match: { 'track.music_id': { $in: ids } } },
-        { $group: { _id: '$track.music_id', count: { $sum: 1 } } },
-      ]),
-    ]);
-
-    const tracksByMusic   = Object.groupBy(allTracks, t => t.music_id.toString());
-    const streamsByMusic  = Object.fromEntries(streamAgg.map(s => [s._id.toString(), s.count]));
+    const allTracks = await Track.find({ music_id: { $in: ids } }).sort({ track_number: 1 }).lean();
+    const streamAgg = allTracks.length ? await Stream.aggregate([
+      { $match: { track_id: { $in: allTracks.map(t => t._id) } } },
+      { $group: { _id: '$track_id', count: { $sum: 1 } } },
+    ]) : [];
+    const tracksByMusic = Object.groupBy(allTracks, t => t.music_id.toString());
+    const trackMusic = new Map(allTracks.map(t => [t._id.toString(), t.music_id.toString()]));
+    const streamsByMusic = {};
+    for (const stream of streamAgg) {
+      const musicId = trackMusic.get(stream._id.toString());
+      streamsByMusic[musicId] = (streamsByMusic[musicId] || 0) + stream.count;
+    }
 
     res.json({
       music: music.map(m => serializeMusic(m, {
