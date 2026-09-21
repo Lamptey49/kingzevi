@@ -106,6 +106,7 @@ async function saveProfile() {
   const username = document.getElementById('profile-username').value.trim();
   const email = document.getElementById('profile-email').value.trim();
   const bio = document.getElementById('profile-bio').value.trim();
+  const phone = document.getElementById('profile-phone').value.trim();
   const currentPassword = document.getElementById('profile-current-password').value;
   const newPassword = document.getElementById('profile-new-password').value;
   const confirmPassword = document.getElementById('profile-confirm-password').value;
@@ -115,10 +116,15 @@ async function saveProfile() {
     return;
   }
 
+  if(!phone.match(/^\+?[0-9]{10}$/)) {
+    setStatus('Phone number must be valid and contain 10 digits.', true);
+    return;
+  }
   if ((newPassword || confirmPassword || currentPassword) && newPassword.length < 6) {
     setStatus('New password must be at least 6 characters.', true);
     return;
   }
+
 
   if (newPassword && newPassword !== confirmPassword) {
     setStatus('New passwords do not match.', true);

@@ -61,7 +61,7 @@ async function doLogin() {
   clearErr();
   const email=document.getElementById('l-email').value.trim(), pass=document.getElementById('l-pass').value;
   if (!email||!pass) return showErr('Fill in all fields');
-  try { const d=await api('POST','/auth/login',{email,password:pass}); applyUser(d.user,d.token); closeAuth(); updateUI(); toast('Welcome back, '+d.user.username+'! 🎵'); }
+  try { const d=await api('POST','/auth/login',{email,password:pass}); applyUser(d.user,d.token); closeAuth(); updateUI(); loadPosts(1); toast('Welcome back, '+d.user.username+'! 🎵'); }
   catch(e) { showErr(e.message); }
 }
 async function doRegister() {
@@ -69,13 +69,15 @@ async function doRegister() {
   const username=document.getElementById('r-user').value.trim(), email=document.getElementById('r-email').value.trim(), pass=document.getElementById('r-pass').value;
   if (!username||!email||!pass) return showErr('Fill in all fields');
   if (pass.length<6) return showErr('Password must be at least 6 characters');
-  try { const d=await api('POST','/auth/register',{username,email,password:pass,role:selectedRole}); applyUser(d.user,d.token); closeAuth(); updateUI(); toast('Welcome, '+d.user.username+'! 🎉'); }
+  try { const d=await api('POST','/auth/register',{username,email,password:pass,role:selectedRole}); applyUser(d.user,d.token); closeAuth(); updateUI(); loadPosts(1); toast('Welcome, '+d.user.username+'! 🎉'); }
   catch(e) { showErr(e.message); }
 }
 function applyUser(user, tok) {
   me=user; token=tok; localStorage.setItem('st',tok);
 }
 function logout() {
+  feedMode = 'all';
+  if (document.getElementById('feed-filter')) document.getElementById('feed-filter').value = 'all';
   me=null; token=null; localStorage.removeItem('st');
   updateUI(); toast('Signed out. See you soon!');
   loadPosts(1);
@@ -340,6 +342,63 @@ async function submitPost() {
 }
 
 // ── SOCIAL: FEED ──
+
+let feedMode = 'all';
+const socialActions = new Set();
+function setFeed(mode) {
+  if (mode === 'following' && !me) {
+    document.getElementById('feed-filter').value = feedMode;
+    openAuth('login'); return;
+  }
+  feedMode = mode === 'following' ? 'following' : 'all';
+  nextCursor = null;
+  return loadPosts(1);
+}
+function followMarkup(userId, following) {
+  if (!userId || me?.id === userId) return '';
+  return `<button class="post-action" data-follow-user="${esc(userId)}" data-following="${!!following}" aria-pressed="${!!following}" onclick="toggleFollow(this)">${following ? 'Following' : 'Follow'}</button>`;
+}
+async function toggleFollow(button) {
+  if (!me) { openAuth('login'); return; }
+  const userId = button.dataset.followUser;
+  if (socialActions.has('follow:' + userId)) return;
+  socialActions.add('follow:' + userId);
+  const following = button.dataset.following === 'true';
+  const buttons = [...document.querySelectorAll('[data-follow-user]')].filter(el => el.dataset.followUser === userId);
+  buttons.forEach(el => el.disabled = true);
+  try {
+    const d = await api(following ? 'DELETE' : 'PUT', '/social/users/' + userId + '/follow');
+    buttons.forEach(el => { el.dataset.following = String(d.following); el.setAttribute('aria-pressed', String(d.following)); el.textContent = d.following ? 'Following' : 'Follow'; });
+    const profileControl = document.getElementById('pm-follow-control');
+    if (profileControl?.contains(button) || profileControl?.querySelector('[data-follow-user="' + userId + '"]')) {
+      const count = document.getElementById('pm-stat-followers');
+      count.textContent = Math.max(0, Number(count.textContent) + (d.following ? 1 : -1));
+    }
+    if (feedMode === 'following') await loadPosts(1);
+  } catch (error) { toast(error.message, true); }
+  finally { buttons.forEach(el => el.disabled = false); socialActions.delete('follow:' + userId); }
+}
+function shareMarkup(post) {
+  if (post.original_unavailable || me?.id === post.user_id && post.post_type !== 'repost' || me?.username === post.original_author) return '';
+  return `<button class="post-action" data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share'} ? ${post.share_count || 0}</button>`;
+}
+async function sharePost(button) {
+  if (!me) { openAuth('login'); return; }
+  const id = button.dataset.sharePost;
+  if (socialActions.has('share:' + id)) return;
+  socialActions.add('share:' + id); button.disabled = true;
+  try {
+    const d = await api(button.dataset.shared === 'true' ? 'DELETE' : 'PUT', '/social/posts/' + id + '/share');
+    await loadPosts(1);
+    toast(d.shared ? 'Post shared to your profile and the community.' : 'Share removed.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; socialActions.delete('share:' + id); }
+}
+function repostMarkup(post) {
+  if (post.post_type !== 'repost') return '';
+  return `<div style="padding:12px 16px;color:var(--muted);font-size:.85rem">${post.original_unavailable ? 'Original post is no longer available.' : 'Shared a post by @' + esc(post.original_author || 'Deleted user')}</div>`;
+}
+
 async function loadPosts(page=1) {
   if (!document.getElementById('posts-feed')) return;
   if (page !== 1 && (postsLoading || postPage >= postPages)) return;
@@ -352,7 +411,7 @@ async function loadPosts(page=1) {
 
   try {
     const cursor = page > 1 && nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
-    const d = await api('GET', '/social/posts?page=' + page + '&limit=10' + cursor);
+    const d = await api('GET', '/social/posts?page=' + page + '&limit=10&feed=' + feedMode + cursor);
     if (generation !== feedGeneration) return;
     if (!Array.isArray(d.posts)) throw new Error('Invalid posts response');
     if (page === 1) feed.querySelectorAll('.post-card,.empty,.empty-state,.loading-state').forEach(el => el.remove());
@@ -364,7 +423,7 @@ async function loadPosts(page=1) {
     postPages = d.has_more === false || d.posts.length === 0 ? page : (d.has_more ? page + 1 : Number(d.pages) || page);
     nextCursor = d.next_cursor || null;
 
-    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>No posts yet. Be the first to share!</p></div>');
+    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>' + (feedMode === 'following' ? 'No posts from accounts you follow yet.' : 'No posts yet. Be the first to share!') + '</p></div>');
   } catch (error) {
     if (generation !== feedGeneration) return;
     feed.querySelectorAll('.loading-state,.feed-error').forEach(el => el.remove());
@@ -408,11 +467,14 @@ function buildPostEl(post) {
         </div>
         <div class="post-time">${relTime(post.created_at)}</div>
       </div>
+      ${followMarkup(post.user_id, post.following_author)}
       ${isOwn?`<button class="post-delete" onclick="deletePost('${post.id}')" title="Delete">🗑</button>`:''}
     </div>
+    ${repostMarkup(post)}
     ${post.content?`<div class="post-content">${escNl(post.content)}</div>`:''}
     ${post.image_url?`<img class="post-image" src="${esc(post.image_url)}" alt="Post image" loading="lazy" decoding="async"/>`:''}
     <div class="post-footer">
+      ${shareMarkup(post)}
       <button class="post-action${post.liked_by_me?' liked':''}" id="like-btn-${post.id}" onclick="toggleLike('${post.id}')">
         <svg viewBox="0 0 24 24"><path d="${post.liked_by_me?'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z':'M16.5 3c-1.74 0-3.41.81-4.5 2.09C10.91 3.81 9.24 3 7.5 3 4.42 3 2 5.42 2 8.5c0 3.78 3.4 6.86 8.55 11.54L12 21.35l1.45-1.32C18.6 15.36 22 12.28 22 8.5 22 5.42 19.58 3 16.5 3zm-4.4 15.55l-.1.1-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5c2 0 3.5 1.5 3.5 3.5 0 2.89-3.14 5.74-7.9 10.05z'}"/></svg>
         <span id="like-count-${post.id}">${post.like_count||0}</span>

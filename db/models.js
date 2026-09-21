@@ -80,12 +80,15 @@ const postSchema = new Schema({
   user_id:          { type: Schema.Types.ObjectId, ref: 'User', required: true },
   content:          { type: String, default: null },
   image_url:        { type: String, default: null },   // Cloudinary secure_url
+  original_post_id: { type: Schema.Types.ObjectId, ref: 'Post', default: null },
   image_public_id:  { type: String, default: null },   // Cloudinary public_id (for deletion)
-  post_type:        { type: String, enum: ['text', 'image'], default: 'text' },
+  post_type:        { type: String, enum: ['text', 'image', 'repost'], default: 'text' },
   like_count:       { type: Number, default: 0 },
   comment_count:    { type: Number, default: 0 },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false }, toJSON });
 
+postSchema.index({ user_id: 1, original_post_id: 1 }, { unique: true, partialFilterExpression: { original_post_id: { $type: 'objectId' } } });
+postSchema.index({ original_post_id: 1 });
 postSchema.index({ created_at: -1, _id: -1 });
 postSchema.index({ user_id: 1, created_at: -1, _id: -1 });
 
@@ -112,3 +115,11 @@ const commentSchema = new Schema({
 commentSchema.index({ post_id: 1, created_at: 1 });
 
 export const Comment = model('Comment', commentSchema);
+
+const followSchema = new Schema({
+  follower_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  following_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+}, { timestamps: { createdAt: 'created_at', updatedAt: false } });
+followSchema.index({ follower_id: 1, following_id: 1 }, { unique: true });
+followSchema.index({ following_id: 1 });
+export const Follow = model('Follow', followSchema);

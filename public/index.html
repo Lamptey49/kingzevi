@@ -299,7 +299,9 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
 
 <!-- ── HEADER ── -->
 <header>
-  <div class="logo">KIN<span>G</span>ZEVI</div>
+  <div class="logo">
+    <img src="assets/kz_logo.jpeg" alt="Logo" width="32" height="32"/>
+  </div>
   <nav class="nav-links">
     
     <a onclick="goto('community')" class="keep">Community</a>
@@ -311,7 +313,9 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
   <div style="display:none" id="header-user">
     <div class="user-pill">
       <a href="fan-dashboard.html" class="u-role" id="h-role">
-      <span class="u-avatar" id="h-avatar">🎧</span>
+      <span class="u-avatar" id="h-avatar">
+        <img src="" alt="Avatar" id="h-avatar-img" style="display:none;width:28px;height:28px;border-radius:50%;object-fit:cover"/>
+      </span>
       <span class="u-name" id="h-name"></span>
       <span class="u-role fan" id="h-role"></span></a>
       <button class="btn-ghost-sm" onclick="logout()">Sign out</button>
@@ -432,6 +436,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
       </div>
 
       <!-- POSTS FEED -->
+      <label style="display:block;margin:12px 0">Show <select id="feed-filter" onchange="setFeed(this.value)" aria-label="Choose feed" style="font:inherit;padding:8px;border-radius:8px;background:var(--card,var(--surface));color:var(--text)"><option value="all">Everyone</option><option value="following">Following</option></select></label>
       <div id="posts-feed"><div class="loading-state"><div class="spinner"></div>Loading posts…</div></div>
       <button class="load-more-btn" id="load-more" style="display:none" onclick="loadMorePosts()">Load more posts</button>
     </div>

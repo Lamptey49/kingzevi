@@ -8,7 +8,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 for (const page of ['index', 'social']) {
   function setup(fetcher) {
     const html = readFileSync(`public/${page}.html`, 'utf8');
-    const dom = new JSDOM(html, { url: 'http://localhost', runScripts: 'outside-only' });
+    const dom = new JSDOM(html, { url: 'http://localhost', runScripts: 'outside-only', pretendToBeVisual: true });
     dom.window.fetch = fetcher;
     dom.window.AbortSignal = AbortSignal;
     const script = page === 'index' ? readFileSync('public/JS/helper.js', 'utf8') : html.match(/<script>([\s\S]*?)<\/script>/)[1];
@@ -16,6 +16,30 @@ for (const page of ['index', 'social']) {
     return dom;
   }
   const response = data => ({ ok: true, json: async () => data });
+
+  test(`${page}: follow and share controls persist actions and switch to Following`, async () => {
+    const writes = []; let following = false, shared = false;
+    const dom = setup(async (url, options) => {
+      if (url.endsWith('/follow')) { writes.push(options.method); following = options.method === 'PUT'; return response({ following }); }
+      if (url.endsWith('/share')) { writes.push(options.method); shared = options.method === 'PUT'; return response({ shared }); }
+      if (url.includes('/posts?')) return response({ posts: [{ ...post('one'), following_author: following, shared_by_me: shared, share_count: shared ? 1 : 0 }], has_more: false });
+      return response({ users: [] });
+    });
+    await tick();
+    dom.window.applyUser({ id: 'viewer', username: 'viewer', role: 'fan' }, 'token');
+    let follow = dom.window.document.querySelector('[data-follow-user="user"]');
+    await dom.window.toggleFollow(follow);
+    assert.equal(follow.textContent, 'Following');
+    await dom.window.setFeed('following');
+    let share = dom.window.document.querySelector('[data-share-post="one"]');
+    await dom.window.sharePost(share);
+    share = dom.window.document.querySelector('[data-share-post="one"]');
+    assert.match(share.textContent, /Undo share/);
+    await dom.window.sharePost(share);
+    assert.deepEqual(writes, ['PUT', 'PUT', 'DELETE']);
+    dom.window.close();
+  });
+
   test(`${page}: real page starts, loads saved posts, shows pictures, and stops at last page`, async () => {
     let calls = 0;
     const dom = setup(async url => {

@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { Router }        from 'express';
 import multer            from 'multer';
-import { Post, PostLike, Comment } from '../db/models.js';
+import { Post, PostLike, Comment, Follow, User } from '../db/models.js';
 import { requireAuth, optionalAuth } from '../middleware/auth.js';
 import { uploadBuffer, deleteImage } from '../lib/cloudinary.js';
 
@@ -22,18 +22,25 @@ const upload = multer({
 });
 
 // ── Serialisers ────────────────────────────────────────────────
-function serializePost(post, likedByMe = false) {
+export function serializePost(post, likedByMe = false) {
+  const original = post.post_type === 'repost' ? post.original_post_id : null;
+  const source = post.post_type === 'repost' ? original : post;
   const u = post.user_id;
   return {
     id:            post._id.toString(),
     user_id:       u?._id?.toString() ?? post.user_id?.toString(),
-    content:       post.content      ?? null,
-    image_url:     post.image_url    ?? null,
+    content:       source?.content ?? null,
+    image_url:     source?.image_url ?? null,
     post_type:     post.post_type,
     like_count:    post.like_count,
     comment_count: post.comment_count,
     created_at:    post.created_at,
     liked_by_me:   likedByMe,
+    original_post_id: original?._id?.toString() ?? null,
+    original_author: original?.user_id?.username ?? null,
+    original_unavailable: post.post_type === 'repost' && !original,
+    share_count: 0,
+    shared_by_me: false,
     username:      u?.username   ?? '',
     avatar:        u?.avatar     ?? '🎧',
     avatar_url:    u?.avatar_url ?? null,
@@ -61,23 +68,29 @@ router.get('/posts', optionalAuth, async (req, res) => {
     const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 50));
     const page  = Math.max(parseInt(req.query.page,  10) || 1,  1);
 
-    let filter = {};
+    const follows = req.user ? await Follow.find({ follower_id: req.user.id }).select('following_id').lean() : [];
+    const followedIds = follows.map(f => f.following_id);
+    const followedSet = new Set(followedIds.map(String));
+    const baseFilter = req.query.feed === 'following' ? { user_id: { $in: followedIds } } : {};
+    if (req.query.feed === 'following' && !req.user) return res.status(401).json({ error: 'Sign in to view your following feed' });
+    let filter = baseFilter;
     if (req.query.cursor) {
       try {
         const cursor = JSON.parse(Buffer.from(req.query.cursor, 'base64url').toString());
         const date = new Date(cursor.created_at);
         if (!mongoose.isValidObjectId(cursor.id) || !Number.isFinite(date.getTime())) throw new Error();
-        filter = { $or: [{ created_at: { $lt: date } }, { created_at: date, _id: { $lt: cursor.id } }] };
+        filter = { ...baseFilter, $or: [{ created_at: { $lt: date } }, { created_at: date, _id: { $lt: cursor.id } }] };
       } catch { return res.status(400).json({ error: 'Invalid posts cursor' }); }
     }
     const [rows, total] = await Promise.all([
       Post.find(filter)
         .populate('user_id', 'username avatar avatar_url role')
+        .populate({ path: 'original_post_id', populate: { path: 'user_id', select: 'username avatar avatar_url role' } })
         .sort({ created_at: -1, _id: -1 })
         .skip(req.query.cursor ? 0 : (page - 1) * limit)
         .limit(limit + 1)
         .lean(),
-      Post.countDocuments(),
+      Post.countDocuments(baseFilter),
     ]);
 
     const posts = rows.slice(0, limit);
@@ -92,8 +105,18 @@ router.get('/posts', optionalAuth, async (req, res) => {
       likedSet = new Set(likes.map(l => l.post_id.toString()));
     }
 
+    const originalIds = posts.map(p => p.post_type === 'repost' ? p.original_post_id?._id : p._id).filter(Boolean);
+    const [shares, myShares] = await Promise.all([
+      Post.aggregate([{ $match: { original_post_id: { $in: originalIds } } }, { $group: { _id: '$original_post_id', count: { $sum: 1 } } }]),
+      req.user ? Post.find({ user_id: req.user.id, original_post_id: { $in: originalIds } }).select('original_post_id').lean() : [],
+    ]);
+    const shareCounts = new Map(shares.map(s => [String(s._id), s.count]));
+    const sharedSet = new Set(myShares.map(s => String(s.original_post_id)));
     res.json({
-      posts: posts.map(p => serializePost(p, likedSet.has(p._id.toString()))),
+      posts: posts.map(p => {
+        const id = String(p.post_type === 'repost' ? p.original_post_id?._id : p._id);
+        return { ...serializePost(p, likedSet.has(String(p._id))), following_author: followedSet.has(String(p.user_id?._id)), share_count: shareCounts.get(id) || 0, shared_by_me: sharedSet.has(id) };
+      }),
       total,
       has_more: hasMore,
       next_cursor: hasMore && last ? Buffer.from(JSON.stringify({ created_at: last.created_at, id: last._id })).toString('base64url') : null,
@@ -259,5 +282,55 @@ router.get('/stats', optionalAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to load stats' });
   }
 });
+
+
+router.get('/users/suggestions', optionalAuth, async (req, res) => {
+  const follows = req.user ? await Follow.find({ follower_id: req.user.id }).select('following_id').lean() : [];
+  const excluded = follows.map(f => f.following_id);
+  if (req.user) excluded.push(req.user.id);
+  const users = await User.find({ _id: { $nin: excluded } }).select('username avatar avatar_url role').sort({ _id: -1 }).limit(6).lean();
+  res.json({ users: users.map(u => ({ id: String(u._id), username: u.username, avatar: u.avatar, avatar_url: u.avatar_url, role: u.role })) });
+});
+
+// Idempotent follow controls prevent duplicate relationships on repeated clicks.
+router.route('/users/:id/follow')
+  .all(requireAuth, (req, res, next) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid user' });
+    if (req.params.id.toLowerCase() === req.user.id.toLowerCase()) return res.status(400).json({ error: 'You cannot follow yourself' });
+    next();
+  })
+  .put(async (req, res) => {
+    if (!await User.exists({ _id: req.params.id })) return res.status(404).json({ error: 'User not found' });
+    try {
+      await Follow.updateOne({ follower_id: req.user.id, following_id: req.params.id }, { $setOnInsert: { follower_id: req.user.id, following_id: req.params.id } }, { upsert: true });
+    } catch (error) { if (error.code !== 11000) throw error; }
+    res.json({ following: true });
+  })
+  .delete(async (req, res) => {
+    await Follow.deleteOne({ follower_id: req.user.id, following_id: req.params.id });
+    res.json({ following: false });
+  });
+
+router.route('/posts/:id/share')
+  .all(requireAuth, async (req, res, next) => {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid post' });
+    const post = await Post.findById(req.params.id).lean();
+    const original = post?.post_type === 'repost' ? await Post.findById(post.original_post_id).lean() : post;
+    if (!original) return res.status(404).json({ error: 'Original post is no longer available' });
+    if (String(original.user_id) === req.user.id) return res.status(400).json({ error: 'This is your own post' });
+    req.originalPost = original;
+    next();
+  })
+  .put(async (req, res) => {
+    const filter = { user_id: req.user.id, original_post_id: req.originalPost._id };
+    try { await Post.updateOne(filter, { $setOnInsert: { ...filter, post_type: 'repost' } }, { upsert: true }); }
+    catch (error) { if (error.code !== 11000) throw error; }
+    res.json({ shared: true, share_count: await Post.countDocuments({ original_post_id: req.originalPost._id }) });
+  })
+  .delete(async (req, res) => {
+    const repost = await Post.findOneAndDelete({ user_id: req.user.id, original_post_id: req.originalPost._id });
+    if (repost) await Promise.all([Comment.deleteMany({ post_id: repost._id }), PostLike.deleteMany({ post_id: repost._id })]);
+    res.json({ shared: false, share_count: await Post.countDocuments({ original_post_id: req.originalPost._id }) });
+  });
 
 export default router;

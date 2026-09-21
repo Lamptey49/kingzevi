@@ -145,7 +145,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 .post-text{font-size:.9rem;line-height:1.72;color:var(--body);margin-bottom:12px;white-space:pre-line}
 .post-img{width:100%;border-radius:var(--r-md);max-height:440px;object-fit:cover;display:block;margin-bottom:12px;cursor:pointer}
 .post-img:hover{opacity:.93}
-.post-actions{display:flex;align-items:center;gap:2px}
+.post-actions{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
 .act-btn{display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--muted);cursor:pointer;padding:6px 10px;border-radius:var(--r-md);font-size:.78rem;font-weight:500;font-family:var(--ff-body);transition:all .18s}
 .act-btn:hover{background:var(--elevated);color:var(--text)}
 .act-btn.liked{color:var(--coral)}
@@ -362,10 +362,13 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
           <div class="pm-name"    id="pm-display-name"></div>
           <div class="pm-username" id="pm-handle"></div>
         </div>
+        <span id="pm-follow-control"></span>
         <button class="pm-edit-btn" id="pm-edit-btn" onclick="toggleEditForm()">Edit Profile</button>
       </div>
       <div class="pm-bio" id="pm-bio-text"></div>
       <div class="pm-stats">
+        <div class="pm-stat"><div class="num" id="pm-stat-followers">0</div><div class="lbl">Followers</div></div>
+        <div class="pm-stat"><div class="num" id="pm-stat-following">0</div><div class="lbl">Following</div></div>
         <div class="pm-stat"><div class="num" id="pm-stat-posts">0</div><div class="lbl">Posts</div></div>
         <div class="pm-stat"><div class="num" id="pm-stat-likes">0</div><div class="lbl">Likes received</div></div>
       </div>
@@ -426,7 +429,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
       <!-- Guest -->
       <div id="sb-guest-wrap">
         <div class="guest-box">
-          <p>Join the SOLACE fan community</p>
+          <p>Join the KingZevi fan community</p>
           <button class="btn btn-gold btn-full btn-sm" onclick="openAuth('register')">Join Free</button>
           <button class="btn btn-outline btn-full btn-sm" onclick="openAuth('login')">Sign In</button>
         </div>
@@ -494,6 +497,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
     </div>
 
     <!-- Feed list -->
+    <label style="display:block;margin:12px 0">Show <select id="feed-filter" onchange="setFeed(this.value)" aria-label="Choose feed" style="font:inherit;padding:8px;border-radius:8px;background:var(--card,var(--surface));color:var(--text)"><option value="all">Everyone</option><option value="following">Following</option></select></label>
     <div id="feed-list">
       <div id="feed-skel">
         <div class="skel-post"><div class="skel-row"><div class="skeleton skel-av"></div><div class="skel-lines"><div class="skeleton skel-line" style="width:38%"></div><div class="skeleton skel-line" style="width:68%"></div></div></div><div class="skeleton skel-img"></div></div>
@@ -577,7 +581,6 @@ async function init() {
   }
   syncUI();
   await Promise.all([loadPosts(1), loadStats()]);
-  buildStories();
   buildSuggestions();
 }
 
@@ -611,9 +614,9 @@ async function doLogin() {
   try {
     const d = await api('POST', '/auth/login', { email, password: pass });
     applyUser(d.user, d.token);
-    closeAuth(); syncUI();
+    closeAuth(); syncUI(); loadPosts(1); buildSuggestions();
     toast('Welcome back, ' + d.user.username + '! 🎵');
-    loadPosts(1);
+
   } catch (e) { showErr(e.message); }
 }
 async function doRegister() {
@@ -624,7 +627,7 @@ async function doRegister() {
   try {
     const d = await api('POST', '/auth/register', { username, email, password: pass, role: selectedRole });
     applyUser(d.user, d.token);
-    closeAuth(); syncUI();
+    closeAuth(); syncUI(); loadPosts(1); buildSuggestions();
     toast('Welcome to SOLACE, ' + d.user.username + '! 🎉');
   } catch (e) { showErr(e.message); }
 }
@@ -633,9 +636,11 @@ function applyUser(user, tok) {
   localStorage.setItem('st', tok); localStorage.removeItem('sl_tok');
 }
 function logout() {
+  feedMode = 'all';
+  if (document.getElementById('feed-filter')) document.getElementById('feed-filter').value = 'all';
   me = null; token = null;
   localStorage.removeItem('sl_tok'); localStorage.removeItem('st');
-  syncUI(); loadPosts(1);
+  syncUI(); loadPosts(1); buildSuggestions();
   toast('Signed out. See you soon!');
 }
 
@@ -753,6 +758,63 @@ async function submitPost() {
 }
 
 // ── POSTS ─────────────────────────────────────────────────────
+
+let feedMode = 'all';
+const socialActions = new Set();
+function setFeed(mode) {
+  if (mode === 'following' && !me) {
+    document.getElementById('feed-filter').value = feedMode;
+    openAuth('login'); return;
+  }
+  feedMode = mode === 'following' ? 'following' : 'all';
+  nextCursor = null;
+  return loadPosts(1);
+}
+function followMarkup(userId, following) {
+  if (!userId || me?.id === userId) return '';
+  return `<button class="act-btn" data-follow-user="${esc(userId)}" data-following="${!!following}" aria-pressed="${!!following}" onclick="toggleFollow(this)">${following ? 'Following' : 'Follow'}</button>`;
+}
+async function toggleFollow(button) {
+  if (!me) { openAuth('login'); return; }
+  const userId = button.dataset.followUser;
+  if (socialActions.has('follow:' + userId)) return;
+  socialActions.add('follow:' + userId);
+  const following = button.dataset.following === 'true';
+  const buttons = [...document.querySelectorAll('[data-follow-user]')].filter(el => el.dataset.followUser === userId);
+  buttons.forEach(el => el.disabled = true);
+  try {
+    const d = await api(following ? 'DELETE' : 'PUT', '/social/users/' + userId + '/follow');
+    buttons.forEach(el => { el.dataset.following = String(d.following); el.setAttribute('aria-pressed', String(d.following)); el.textContent = d.following ? 'Following' : 'Follow'; });
+    const profileControl = document.getElementById('pm-follow-control');
+    if (profileControl?.contains(button) || profileControl?.querySelector('[data-follow-user="' + userId + '"]')) {
+      const count = document.getElementById('pm-stat-followers');
+      count.textContent = Math.max(0, Number(count.textContent) + (d.following ? 1 : -1));
+    }
+    if (feedMode === 'following') await loadPosts(1);
+  } catch (error) { toast(error.message, true); }
+  finally { buttons.forEach(el => el.disabled = false); socialActions.delete('follow:' + userId); }
+}
+function shareMarkup(post) {
+  if (post.original_unavailable || me?.id === post.user_id && post.post_type !== 'repost' || me?.username === post.original_author) return '';
+  return `<button class="act-btn" data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share'} ? ${post.share_count || 0}</button>`;
+}
+async function sharePost(button) {
+  if (!me) { openAuth('login'); return; }
+  const id = button.dataset.sharePost;
+  if (socialActions.has('share:' + id)) return;
+  socialActions.add('share:' + id); button.disabled = true;
+  try {
+    const d = await api(button.dataset.shared === 'true' ? 'DELETE' : 'PUT', '/social/posts/' + id + '/share');
+    await loadPosts(1);
+    toast(d.shared ? 'Post shared to your profile and the community.' : 'Share removed.');
+  } catch (error) { toast(error.message, true); }
+  finally { button.disabled = false; socialActions.delete('share:' + id); }
+}
+function repostMarkup(post) {
+  if (post.post_type !== 'repost') return '';
+  return `<div style="padding:12px 16px;color:var(--muted);font-size:.85rem">${post.original_unavailable ? 'Original post is no longer available.' : 'Shared a post by @' + esc(post.original_author || 'Deleted user')}</div>`;
+}
+
 async function loadPosts(page=1) {
   if (page !== 1 && (postsLoading || postPage >= postPages)) return;
   const generation = page === 1 ? ++feedGeneration : feedGeneration;
@@ -764,7 +826,7 @@ async function loadPosts(page=1) {
   document.getElementById('feed-sub').textContent = 'Loading?';
   try {
     const cursor = page > 1 && nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
-    const d = await api('GET', '/social/posts?page=' + page + '&limit=10' + cursor);
+    const d = await api('GET', '/social/posts?page=' + page + '&limit=10&feed=' + feedMode + cursor);
     if (generation !== feedGeneration) return;
     if (!Array.isArray(d.posts)) throw new Error('Invalid posts response');
     if (page === 1) feed.querySelectorAll('.post-card,.empty,.empty-state,.loading-state').forEach(el => el.remove());
@@ -776,7 +838,7 @@ async function loadPosts(page=1) {
     postPages = d.has_more === false || d.posts.length === 0 ? page : (d.has_more ? page + 1 : Number(d.pages) || page);
     nextCursor = d.next_cursor || null;
     clearSkel(); document.getElementById('feed-sub').textContent = d.total + ' posts from the community';
-    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>No posts yet. Be the first to share!</p></div>');
+    if (!feed.querySelector('.post-card')) feed.insertAdjacentHTML('beforeend', '<div class="empty-state empty"><p>' + (feedMode === 'following' ? 'No posts from accounts you follow yet.' : 'No posts yet. Be the first to share!') + '</p></div>');
   } catch (error) {
     if (generation !== feedGeneration) return;
     feed.querySelectorAll('.loading-state,.feed-error').forEach(el => el.remove());
@@ -829,11 +891,14 @@ function buildPostEl(post) {
         </div>
         <div class="post-time">${relTime(post.created_at)}</div>
       </div>
+      ${followMarkup(post.user_id, post.following_author)}
       ${isOwn?`<button class="post-del" onclick="deletePost('${post.id}')" title="Delete">⋯</button>`:''}
     </div>
+    ${repostMarkup(post)}
     ${post.content?`<div class="post-text">${escNl(post.content)}</div>`:''}
     ${post.image_url?`<img class="post-img" src="${esc(post.image_url)}" alt="" loading="lazy" decoding="async" onclick="openLightbox('${esc(post.image_url)}')"/>`:''}
     <div class="post-actions">
+      ${shareMarkup(post)}
       <button class="act-btn${post.liked_by_me?' liked':''}" id="lb-${post.id}" onclick="toggleLike('${post.id}')">
         ${heartSvg(post.liked_by_me)}<span id="lc-${post.id}">${post.like_count||0}</span>
       </button>
@@ -939,6 +1004,7 @@ async function openProfile(username) {
   // Reset modal state
   document.getElementById('pm-avatar-el').innerHTML='🎧';
   document.getElementById('pm-bio-text').textContent='';
+  document.getElementById('pm-follow-control').innerHTML='';
   document.getElementById('pm-posts-grid').innerHTML='<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--muted);font-size:.84rem">Loading…</div>';
   document.getElementById('pm-edit-form').classList.remove('open');
 
@@ -953,7 +1019,11 @@ async function openProfile(username) {
 
   try {
     const d=await api('GET',`/profile/${username}`);
+    if (profileUsername !== username) return;
     const u=d.user;
+    document.getElementById('pm-follow-control').innerHTML = followMarkup(u.id, d.following);
+    document.getElementById('pm-stat-followers').textContent = d.stats.followers;
+    document.getElementById('pm-stat-following').textContent = d.stats.following;
 
     // Avatar
     const avEl=document.getElementById('pm-avatar-el');
@@ -1083,16 +1153,16 @@ function buildStories() {
 }
 
 // ── SUGGESTIONS ───────────────────────────────────────────────
-function buildSuggestions() {
-  const list=document.getElementById('sug-list');
-  [['solace_artist','🎤','artist'],['ama_gh','🌟','fan'],['kwame_vibes','🔥','fan']].forEach(([n,av,role])=>{
-    list.insertAdjacentHTML('beforeend',`
-      <div class="sug-item" onclick="openProfile('${n}')">
-        ${makeAvEl(av,null,'sm')}
-        <div><div class="sug-name">${n}</div><div class="sug-role">${role}</div></div>
-        <button class="sug-follow" onclick="event.stopPropagation();this.classList.toggle('following');this.textContent=this.classList.contains('following')?'Following':'Follow'">Follow</button>
-      </div>`);
-  });
+async function buildSuggestions() {
+  const list = document.getElementById('sug-list');
+  try {
+    const d = await api('GET', '/social/users/suggestions');
+    list.innerHTML = (d.users || []).map(u => `<div class="sug-item">
+      ${makeAvEl(u.avatar, u.avatar_url, 'sm')}
+      <div><button class="sug-name" onclick="openProfile(this.dataset.username)" data-username="${esc(u.username)}">${esc(u.username)}</button><div class="sug-role">${esc(u.role)}</div></div>
+      ${followMarkup(u.id, false)}
+    </div>`).join('') || '<p>No suggestions right now.</p>';
+  } catch { list.textContent = 'Suggestions are unavailable.'; }
 }
 
 // ── TOAST ─────────────────────────────────────────────────────

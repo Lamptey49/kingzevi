@@ -51,3 +51,13 @@ solace/
 | Guest  | Browse music, read posts & comments                           |
 | fan    | + Like, comment, create text/image posts, download music      |
 | artist | + Upload music, delete own music, view artist stats           |
+
+### Following and sharing
+
+- Use **Follow / Following** on a post, suggested account, or public profile to follow or unfollow its author.
+- Switch the community feed between **Everyone** and **Following**. Following requires sign-in.
+- **Share** reposts another user's post to your profile and the community with original-author credit. **Undo share** removes your repost. Images stay on Cloudinary; reposts reference the original MongoDB post.
+- Deleted originals display an unavailable message in existing reposts.
+- Follow relationships and reposts use unique MongoDB indexes to prevent duplicates. Allow Mongoose to create the new indexes when deploying.
+
+Run `npm test` for browser-DOM and isolated MongoDB regression tests. Tests mock Cloudinary uploads and do not write to the configured production database.

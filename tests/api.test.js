@@ -8,7 +8,8 @@ import { Writable } from 'node:stream';
 import social from '../routes/social.js';
 import auth from '../routes/auth.js';
 import music from '../routes/music.js';
-import { User, Post, Music, Track, Stream } from '../db/models.js';
+import profile from '../routes/profile.js';
+import { User, Post, Music, Track, Stream, Follow } from '../db/models.js';
 import { signToken } from '../middleware/auth.js';
 
 test('MongoDB feed pagination, profile pictures and indexed music counts', async t => {
@@ -17,7 +18,7 @@ test('MongoDB feed pagination, profile pictures and indexed music counts', async
   await mongoose.connect(db.getUri());
   const app = express();
   app.use(express.json());
-  app.use('/api/social', social); app.use('/api/auth', auth); app.use('/api/music', music);
+  app.use('/api/profile', profile); app.use('/api/social', social); app.use('/api/auth', auth); app.use('/api/music', music);
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}/api`;
@@ -59,4 +60,42 @@ test('MongoDB feed pagination, profile pictures and indexed music counts', async
   await Stream.insertMany([{ track_id: track.id }, { track_id: track.id }]);
   const releases = await get('/music?type=single');
   assert.equal(releases.status, 200); assert.equal(releases.music[0].stream_count, 2);
+
+  await Promise.all([Follow.init(), Post.init()]);
+  const other = await User.create({ username: 'listener', email: 'listener@test.local', password_hash: 'unused' });
+  const otherToken = signToken({ id: other.id, role: 'fan' });
+  const request = async (method, path, authToken = otherToken) => {
+    const r = await fetch(base + path, { method, headers: authToken ? { Authorization: 'Bearer ' + authToken } : {} });
+    return { status: r.status, ...await r.json() };
+  };
+  assert.equal((await request('PUT', '/social/users/' + user.id + '/follow', null)).status, 401);
+  assert.equal((await request('PUT', '/social/users/' + other.id + '/follow')).status, 400);
+  await Promise.all([request('PUT', '/social/users/' + user.id + '/follow'), request('PUT', '/social/users/' + user.id + '/follow')]);
+  assert.equal(await Follow.countDocuments({ follower_id: other.id }), 1);
+  const publicProfile = await request('GET', '/profile/fan');
+  assert.equal(publicProfile.following, true); assert.equal(publicProfile.stats.followers, 1);
+  assert.equal((await request('GET', '/social/posts?feed=following')).posts.length, 6);
+  assert.equal((await request('GET', '/social/posts?feed=following', null)).status, 401);
+  await request('DELETE', '/social/users/' + user.id + '/follow');
+  assert.equal((await request('GET', '/social/posts?feed=following')).posts.length, 0);
+
+  const originalId = first.posts[0].id;
+  await Post.updateOne({ _id: originalId }, { image_url: 'https://res.cloudinary.com/demo/image/upload/post.jpg' });
+  assert.equal((await request('PUT', '/social/posts/' + originalId + '/share', token)).status, 400);
+  assert.equal((await request('PUT', '/social/posts/' + originalId + '/share', null)).status, 401);
+  await Promise.all([request('PUT', '/social/posts/' + originalId + '/share'), request('PUT', '/social/posts/' + originalId + '/share')]);
+  assert.equal(await Post.countDocuments({ original_post_id: originalId }), 1);
+  let feed = await request('GET', '/social/posts');
+  const repost = feed.posts.find(p => p.post_type === 'repost');
+  assert.equal(repost.image_url, 'https://res.cloudinary.com/demo/image/upload/post.jpg');
+  assert.equal(repost.original_author, 'fan'); assert.equal(repost.content, first.posts[0].content);
+  assert.equal(repost.shared_by_me, true); assert.equal(repost.share_count, 1);
+  assert.equal((await request('GET', '/profile/listener')).posts[0].original_author, 'fan');
+  await request('DELETE', '/social/posts/' + repost.id + '/share');
+  assert.equal(await Post.countDocuments({ original_post_id: originalId }), 0);
+  assert.ok(await Post.exists({ _id: originalId }));
+  await request('PUT', '/social/posts/' + originalId + '/share');
+  await request('DELETE', '/social/posts/' + originalId, token);
+  feed = await request('GET', '/social/posts');
+  assert.equal(feed.posts.find(p => p.post_type === 'repost').original_unavailable, true);
 });

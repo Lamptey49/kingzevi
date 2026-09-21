@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer      from 'multer';
 import { User }    from '../db/models.js';
-import { Post, PostLike } from '../db/models.js';
-import { requireAuth }    from '../middleware/auth.js';
+import { Post, PostLike, Follow } from '../db/models.js';
+import { requireAuth, optionalAuth }    from '../middleware/auth.js';
 import { uploadAvatar, deleteImage } from '../lib/cloudinary.js';
 
 const router = Router();
@@ -35,8 +35,9 @@ function serializeUser(user) {
 function serializePost(post) {
   return {
     id:            post._id.toString(),
-    content:       post.content   ?? null,
-    image_url:     post.image_url ?? null,
+    content:       post.post_type === 'repost' ? (post.original_post_id?.content ?? 'Original post is no longer available') : post.content,
+    original_author: post.original_post_id?.user_id?.username ?? null,
+    image_url:     (post.post_type === 'repost' ? post.original_post_id?.image_url : post.image_url) ?? null,
     post_type:     post.post_type,
     like_count:    post.like_count,
     comment_count: post.comment_count,
@@ -46,23 +47,31 @@ function serializePost(post) {
 
 // ── GET /api/profile/:username ─────────────────────────────────
 // Public profile — anyone can view
-router.get('/:username', async (req, res) => {
+router.get('/:username', optionalAuth, async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username })
       .select('-password_hash -email -avatar_public_id');
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const userPosts = await Post.find({ user_id: user._id })
-      .sort({ created_at: -1 })
+      .populate({ path: 'original_post_id', populate: { path: 'user_id', select: 'username' } })
+      .sort({ created_at: -1, _id: -1 })
       .limit(24)
       .lean();
 
-    const postIds      = userPosts.map(p => p._id);
-    const likesReceived = await PostLike.countDocuments({ post_id: { $in: postIds } });
+    const likes = await Post.aggregate([{ $match: { user_id: user._id } }, { $group: { _id: null, total: { $sum: '$like_count' } } }]);
+    const likesReceived = likes[0]?.total || 0;
 
+    const [followers, following, isFollowing, postCount] = await Promise.all([
+      Follow.countDocuments({ following_id: user._id }),
+      Follow.countDocuments({ follower_id: user._id }),
+      req.user ? Follow.exists({ follower_id: req.user.id, following_id: user._id }) : false,
+      Post.countDocuments({ user_id: user._id }),
+    ]);
     res.json({
+      following: !!isFollowing,
       user:  serializeUser(user),
-      stats: { posts: userPosts.length, likes_received: likesReceived },
+      stats: { posts: postCount, likes_received: likesReceived, followers, following },
       posts: userPosts.map(serializePost),
     });
   } catch (err) {
