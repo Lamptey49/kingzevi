@@ -314,7 +314,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
 </head>
 <body>
 
-<!-- ── HEADER ── -->
+
 <header>
   <div class="logo">
     <img src="assets/kz_logo.jpeg" alt="Logo" width="32" height="32"/>
@@ -340,7 +340,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
   </div>
 </header>
 
-<!-- ── AUTH MODAL ── -->
+
 <div class="overlay" id="auth-overlay">
   <div class="modal-box">
     <button class="close" onclick="closeAuth()">✕</button>
@@ -375,7 +375,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
   </div>
 </div>
 
-<!-- ── ALBUM MODAL ── -->
+
 <div class="overlay" id="album-overlay" onclick="if(event.target===this)closeAlbum()">
   <div class="album-modal">
     <button class="close" onclick="closeAlbum()">✕</button>
@@ -391,15 +391,15 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
 
 
 
-<!-- ── COMMUNITY ── -->
+
 <section id="community">
   <p class="section-label">Community</p>
   <h2 class="section-title">Fan Space</h2>
   <div class="feed-layout">
 
-    <!-- FEED -->
+  
     <div>
-      <!-- COMPOSER -->
+      
       <div class="composer" id="composer">
         <div class="composer-header">
           <div class="composer-avatar" id="composer-av">🎧</div>
@@ -417,7 +417,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
           </button>
         </div>
 
-        <!-- Compose panel -->
+        
         <div class="compose-panel" id="compose-panel">
           <textarea class="compose-textarea" id="compose-text" placeholder="Share your thoughts with the KINGZEVI community…" maxlength="1000" oninput="updateCharCount()"></textarea>
           <div class="char-count" id="char-count">0 / 1000</div>
@@ -439,7 +439,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
         </div>
       </div>
 
-      <!-- Login prompt for guests -->
+      
       <div id="feed-login-prompt" style="display:none">
         <div class="gate" style="margin-bottom:20px;text-align:center">
           <div style="font-size:1.8rem;margin-bottom:10px">👥</div>
@@ -452,13 +452,13 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
         </div>
       </div>
 
-      <!-- POSTS FEED -->
+      
       <label style="display:block;margin:12px 0">Show <select id="feed-filter" onchange="setFeed(this.value)" aria-label="Choose feed" style="font:inherit;padding:8px;border-radius:8px;background:var(--card,var(--surface));color:var(--text)"><option value="all">Everyone</option><option value="following">Following</option></select></label>
       <div id="posts-feed"><div class="loading-state"><div class="spinner"></div>Loading posts…</div></div>
       <button class="load-more-btn" id="load-more" style="display:none" onclick="loadMorePosts()">Load more posts</button>
     </div>
 
-    <!-- SIDEBAR -->
+    
     <div class="feed-sidebar">
       <div class="sidebar-card">
         <div class="sidebar-title">Community Stats</div>
@@ -492,7 +492,7 @@ footer{text-align:center;padding:32px 48px 90px;color:var(--muted);font-size:.74
   <span style="margin-top:5px;display:block">Powered by KwakuFix Tech · Built for real KZ fans.</span>
 </footer>
 
-<!-- PLAYER -->
+
 <div class="player-bar" id="player">
   <div class="player-track">
     <div class="p-thumb" id="p-thumb">🎵</div>
