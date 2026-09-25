@@ -379,36 +379,54 @@ async function toggleFollow(button) {
   finally { buttons.forEach(el => el.disabled = false); socialActions.delete('follow:' + userId); }
 }
 function shareMarkup(post) {
-  const shareLink = `<button class="post-action" data-share-link="${esc(post.id)}" onclick="sharePostLink(this)">Share link</button>`;
-  if (post.original_unavailable || me?.id === post.user_id && post.post_type !== 'repost' || me?.username === post.original_author) return shareLink;
-  return `<button class="post-action" data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share'} ? ${post.share_count || 0}</button>${shareLink}`;
+  const canRepost = !post.original_unavailable && !(me?.id === post.user_id && post.post_type !== 'repost') && me?.username !== post.original_author;
+  return `<details class="post-share">
+    <summary class="post-action post-share-trigger" aria-label="Share post" title="Share post">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.7 6.8-4.4m-6.8 7 6.8 4.4"/></svg>
+    </summary>
+    <div class="post-share-menu">
+      ${canRepost ? `<button data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo community share' : 'Share to community'}${post.share_count ? ` · ${post.share_count}` : ''}</button>` : ''}
+      <button data-share-link="${esc(post.id)}" onclick="sharePostLink(this)">Share to other platforms</button>
+      <button data-copy-link="${esc(post.id)}" onclick="copyPostLink(this)">Copy link</button>
+    </div>
+  </details>`;
 }
 async function sharePostLink(button) {
-  const url = new URL(window.location.href);
-  url.hash = 'post-' + button.dataset.shareLink;
   try {
     if (navigator.share) {
-      await navigator.share({ title: 'KINGZEVI', text: 'Check out this post on KINGZEVI.', url: url.href });
+      button.closest('.post-share').open = false;
+      await navigator.share({ title: 'KINGZEVI', text: 'Check out this post on KINGZEVI.', url: postShareUrl(button.dataset.shareLink) });
       return;
     }
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url.href);
-      toast('Post link copied.');
-      return;
-    }
-    const input = document.createElement('textarea');
-    input.value = url.href;
-    input.style.position = 'fixed';
-    input.style.opacity = '0';
-    document.body.appendChild(input);
-    input.select();
-    const copied = document.execCommand('copy');
-    input.remove();
-    if (!copied) throw new Error('Copy is not available in this browser.');
-    toast('Post link copied.');
+    await copyPostLink(button);
   } catch (error) {
     if (error.name !== 'AbortError') toast(error.message || 'Could not share this post.', true);
   }
+}
+function postShareUrl(id) {
+  const url = new URL(window.location.href);
+  url.hash = 'post-' + id;
+  return url.href;
+}
+async function copyPostLink(button) {
+  const url = postShareUrl(button.dataset.copyLink || button.dataset.shareLink);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const input = document.createElement('textarea');
+      input.value = url;
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      const copied = document.execCommand('copy');
+      input.remove();
+      if (!copied) throw new Error('Copy is not available in this browser.');
+    }
+    button.closest('.post-share').open = false;
+    toast('Post link copied.');
+  } catch (error) { toast(error.message || 'Could not copy this post link.', true); }
 }
 async function sharePost(button) {
   if (!me) { openAuth('login'); return; }

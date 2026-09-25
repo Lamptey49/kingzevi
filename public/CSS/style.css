@@ -190,6 +190,13 @@ section{padding:52px 48px}
 .post-action.liked{color:var(--danger)}
 .post-action svg{width:15px;height:15px;fill:currentColor}
 .post-action-count{font-weight:600}
+.post-share{position:relative}
+.post-share-trigger{list-style:none;padding:7px;cursor:pointer}
+.post-share-trigger::-webkit-details-marker{display:none}
+.post-share-trigger svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.post-share-menu{position:absolute;z-index:5;left:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+.post-share-menu button{display:block;width:100%;padding:8px 10px;text-align:left;background:none;border:0;border-radius:6px;color:var(--sand);font:500 .78rem 'Inter',sans-serif;cursor:pointer}
+.post-share-menu button:hover{background:var(--navy);color:var(--white)}
 .divider-dot{width:1px;height:18px;background:var(--border);margin:0 2px}
 
 /* Comments drawer */

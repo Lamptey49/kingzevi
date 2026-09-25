@@ -43,19 +43,27 @@ for (const page of ['index', 'social']) {
   test(`${page}: share link uses native sharing or copies a direct post URL`, async () => {
     const dom = setup(async url => url.includes('/posts?') ? response({ posts: [post('one')], has_more: false }) : response({}));
     await tick();
-    const button = dom.window.document.querySelector('[data-share-link="one"]');
+    const shareMenu = dom.window.document.querySelector('.post-share');
+    assert.equal(dom.window.document.querySelectorAll('.post-share-trigger').length, 1);
+    assert.equal(shareMenu.open, false);
+    assert.ok(shareMenu.querySelector('[data-share-post="one"]'));
+    assert.ok(shareMenu.querySelector('[data-share-link="one"]'));
+    assert.ok(shareMenu.querySelector('[data-copy-link="one"]'));
+    shareMenu.open = true;
+    const button = shareMenu.querySelector('[data-share-link="one"]');
     let shared;
     Object.defineProperty(dom.window.navigator, 'share', { configurable: true, value: async value => { shared = value; } });
     await dom.window.sharePostLink(button);
     assert.equal(shared.url, 'http://localhost/#post-one');
     assert.equal(shared.title, 'KINGZEVI');
+    assert.equal(shareMenu.open, false);
     dom.window.close();
 
     const fallbackDom = setup(async url => url.includes('/posts?') ? response({ posts: [post('two')], has_more: false }) : response({}));
     await tick();
     let copied;
     Object.defineProperty(fallbackDom.window.navigator, 'clipboard', { configurable: true, value: { writeText: async value => { copied = value; } } });
-    await fallbackDom.window.sharePostLink(fallbackDom.window.document.querySelector('[data-share-link="two"]'));
+    await fallbackDom.window.copyPostLink(fallbackDom.window.document.querySelector('[data-copy-link="two"]'));
     assert.equal(copied, 'http://localhost/#post-two');
     fallbackDom.window.close();
   });
