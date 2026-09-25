@@ -326,7 +326,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 <div class="overlay" id="auth-overlay">
   <div class="auth-card">
     <button class="auth-close" onclick="closeAuth()">✕</button>
-    <div class="auth-logo-row"><div class="auth-logo-icon"> <img src="assets/kz_logo.jpeg" alt="Logo" width="32" height="32"/></div>
+    <div class="auth-logo-row"><div class="auth-logo-icon"> <img src="assets/kz_logo.jpeg" alt="Logo" width="32" height="32"/></div></div>
     <h2 class="auth-title" id="auth-title">Welcome back</h2>
     <p class="auth-sub" id="auth-sub">Sign in to post and connect</p>
     <div class="auth-tabs">
@@ -829,7 +829,7 @@ function shareMarkup(post) {
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.7 6.8-4.4m-6.8 7 6.8 4.4"/></svg>
     </summary>
     <div class="post-share-menu">
-      ${canRepost ? `<button data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo community share' : 'Share to community'}${post.share_count ? ` · ${post.share_count}` : ''}</button>` : ''}
+      ${canRepost ? `<button data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share to community'}${post.share_count ? ` · ${post.share_count}` : ''}</button>` : ''}
       <button data-share-link="${esc(post.id)}" onclick="sharePostLink(this)">Share to other platforms</button>
       <button data-copy-link="${esc(post.id)}" onclick="copyPostLink(this)">Copy link</button>
     </div>
@@ -896,8 +896,8 @@ async function loadPosts(page=1) {
   const feed = document.getElementById('feed-list');
   const btn = document.getElementById('load-more-btn');
   btn.disabled = true;
-  btn.textContent = 'Loading?';
-  document.getElementById('feed-sub').textContent = 'Loading?';
+  btn.textContent = 'Loading…';
+  document.getElementById('feed-sub').textContent = 'Loading…';
   try {
     const cursor = page > 1 && nextCursor ? '&cursor=' + encodeURIComponent(nextCursor) : '';
     const d = await api('GET', '/social/posts?page=' + page + '&limit=10&feed=' + feedMode + cursor);
