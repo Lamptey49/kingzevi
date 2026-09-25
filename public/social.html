@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>SOLACE — Community</title>
+<title>King Zevi — Community</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -326,7 +326,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 <div class="overlay" id="auth-overlay">
   <div class="auth-card">
     <button class="auth-close" onclick="closeAuth()">✕</button>
-    <div class="auth-logo-row"><div class="auth-logo-icon">S</div><div class="auth-logo-txt">SOLACE</div></div>
+    <div class="auth-logo-row"><div class="auth-logo-icon"> <img src="assets/kz_logo.jpeg" alt="Logo" width="32" height="32"/></div>
     <h2 class="auth-title" id="auth-title">Welcome back</h2>
     <p class="auth-sub" id="auth-sub">Sign in to post and connect</p>
     <div class="auth-tabs">
@@ -431,7 +431,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 
   <!-- LEFT SIDEBAR -->
   <nav class="sidebar">
-    <div class="brand"><div class="brand-logo">S</div><div class="brand-name">SOLACE</div></div>
+    <div class="brand"><div class="brand-logo">K</div><div class="brand-name">KING ZEVI</div></div>
     <button class="nav-item active"                                ><span class="nav-icon">⌂</span> Home</button>
     <button class="nav-item" onclick="openMyProfile()"            ><span class="nav-icon">◎</span> My Profile</button>
     <button class="nav-item"                                       ><span class="nav-icon">♪</span> Music</button>
@@ -496,7 +496,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
               <div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div>
               <div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div>
             </div>
-            <textarea class="compose-ta" id="compose-ta" placeholder="Share something with the SOLACE community…" maxlength="1000" rows="3" oninput="onTypeInput()"></textarea>
+            <textarea class="compose-ta" id="compose-ta" placeholder="Share something with the KING ZEVI community…" maxlength="1000" rows="3" oninput="onTypeInput()"></textarea>
             <div class="img-drop" id="img-drop" onclick="document.getElementById('post-img-file').click()">
               <div style="font-size:1.7rem;margin-bottom:6px">🖼</div>
               <div style="font-size:.83rem;font-weight:500;margin-bottom:3px">Drop a photo here, or click to browse</div>
@@ -620,7 +620,7 @@ function switchAuthTab(tab) {
   document.getElementById('reg-form').style.display   = tab==='register' ? 'block' : 'none';
   document.getElementById('atab-login').classList.toggle('active', tab==='login');
   document.getElementById('atab-reg').classList.toggle('active', tab==='register');
-  document.getElementById('auth-title').textContent = tab==='login' ? 'Welcome back' : 'Join SOLACE';
+  document.getElementById('auth-title').textContent = tab==='login' ? 'Welcome back' : 'Join KING ZEVI';
   document.getElementById('auth-sub').textContent   = tab==='login' ? 'Sign in to post and connect' : 'Create your fan account';
   document.getElementById('auth-switch').innerHTML  = tab==='login'
     ? `Don't have an account? <span onclick="switchAuthTab('register')">Join now</span>`
@@ -656,7 +656,7 @@ async function doRegister() {
     const d = await api('POST', '/auth/register', { username, email, password: pass, role: selectedRole });
     applyUser(d.user, d.token);
     closeAuth(); syncUI(); loadPosts(1); buildSuggestions();
-    toast('Welcome to SOLACE, ' + d.user.username + '! 🎉');
+    toast('Welcome to KING ZEVI, ' + d.user.username + '! 🎉');
   } catch (e) { showErr(e.message); }
 }
 function applyUser(user, tok) {
