@@ -379,8 +379,36 @@ async function toggleFollow(button) {
   finally { buttons.forEach(el => el.disabled = false); socialActions.delete('follow:' + userId); }
 }
 function shareMarkup(post) {
-  if (post.original_unavailable || me?.id === post.user_id && post.post_type !== 'repost' || me?.username === post.original_author) return '';
-  return `<button class="post-action" data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share'} ? ${post.share_count || 0}</button>`;
+  const shareLink = `<button class="post-action" data-share-link="${esc(post.id)}" onclick="sharePostLink(this)">Share link</button>`;
+  if (post.original_unavailable || me?.id === post.user_id && post.post_type !== 'repost' || me?.username === post.original_author) return shareLink;
+  return `<button class="post-action" data-share-post="${esc(post.id)}" data-shared="${!!post.shared_by_me}" aria-pressed="${!!post.shared_by_me}" onclick="sharePost(this)">${post.shared_by_me ? 'Undo share' : 'Share'} ? ${post.share_count || 0}</button>${shareLink}`;
+}
+async function sharePostLink(button) {
+  const url = new URL(window.location.href);
+  url.hash = 'post-' + button.dataset.shareLink;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'KINGZEVI', text: 'Check out this post on KINGZEVI.', url: url.href });
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url.href);
+      toast('Post link copied.');
+      return;
+    }
+    const input = document.createElement('textarea');
+    input.value = url.href;
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand('copy');
+    input.remove();
+    if (!copied) throw new Error('Copy is not available in this browser.');
+    toast('Post link copied.');
+  } catch (error) {
+    if (error.name !== 'AbortError') toast(error.message || 'Could not share this post.', true);
+  }
 }
 async function sharePost(button) {
   if (!me) { openAuth('login'); return; }
