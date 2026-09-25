@@ -259,6 +259,14 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 .pm-stats{display:flex;gap:24px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
 .pm-stat .num{font-family:var(--ff-display);font-weight:700;font-size:1.1rem;color:var(--text)}
 .pm-stat .lbl{font-size:.72rem;color:var(--muted)}
+.pm-connections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;padding:16px 28px;border-top:1px solid var(--border)}
+.pm-connection-title{font-family:var(--ff-display);font-size:.78rem;font-weight:700;color:var(--text);margin-bottom:8px}
+.pm-connection-list{display:grid;gap:5px;max-height:180px;overflow-y:auto}
+.pm-person{display:flex;align-items:center;gap:8px;width:100%;padding:5px 7px;background:none;border:0;border-radius:7px;color:var(--body);text-align:left;font:500 .78rem var(--ff-body);cursor:pointer}
+.pm-person:hover{background:var(--elevated);color:var(--text)}
+.pm-person-avatar{display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex:0 0 28px;overflow:hidden;border-radius:50%;background:var(--elevated)}
+.pm-person-avatar img{width:100%;height:100%;object-fit:cover}
+.pm-connection-empty{padding:7px;color:var(--muted);font-size:.76rem}
 
 /* Edit form inside profile */
 .pm-edit-form{display:none;border-top:1px solid var(--border);padding:20px 28px}
@@ -305,7 +313,7 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
 
 /* Mobile */
 @media(max-width:1100px){:root{--right-w:0px}.right-panel{display:none}.app{grid-template-columns:var(--sidebar-w) 1fr}}
-@media(max-width:720px){:root{--sidebar-w:0px}.app{grid-template-columns:1fr}.sidebar{display:none}.mobile-nav{display:flex}}
+@media(max-width:720px){:root{--sidebar-w:0px}.app{grid-template-columns:1fr}.sidebar{display:none}.mobile-nav{display:flex}.pm-connections{padding:14px 18px;gap:10px}.pm-stats{gap:14px;flex-wrap:wrap}}
 .mobile-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(19,23,32,.96);backdrop-filter:blur(16px);border-top:1px solid var(--border);padding:10px 0 max(10px,env(safe-area-inset-bottom));z-index:200;justify-content:space-around}
 .mob-btn{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:.82rem;padding:6px 16px;border-radius:var(--r-md);transition:color .15s}
 .mob-btn.active{color:var(--gold)}
@@ -379,6 +387,17 @@ body{background:var(--bg);color:var(--body);font-family:var(--ff-body);font-size
         <div class="pm-stat"><div class="num" id="pm-stat-posts">0</div><div class="lbl">Posts</div></div>
         <div class="pm-stat"><div class="num" id="pm-stat-likes">0</div><div class="lbl">Likes received</div></div>
       </div>
+    </div>
+
+    <div class="pm-connections">
+      <section>
+        <h3 class="pm-connection-title">Followers</h3>
+        <div class="pm-connection-list" id="pm-followers-list"></div>
+      </section>
+      <section>
+        <h3 class="pm-connection-title">Following</h3>
+        <div class="pm-connection-list" id="pm-following-list"></div>
+      </section>
     </div>
 
     <!-- Edit form -->
@@ -589,6 +608,8 @@ async function init() {
   syncUI();
   await Promise.all([loadPosts(1), loadStats()]);
   buildSuggestions();
+  const requestedProfile = new URLSearchParams(window.location.search).get('profile');
+  if (requestedProfile) await openProfile(requestedProfile);
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
@@ -1071,12 +1092,14 @@ async function openProfile(username) {
   document.getElementById('profile-overlay').classList.add('open');
 
   try {
-    const d=await api('GET',`/profile/${username}`);
+    const d=await api('GET',`/profile/${encodeURIComponent(username)}`);
     if (profileUsername !== username) return;
     const u=d.user;
     document.getElementById('pm-follow-control').innerHTML = followMarkup(u.id, d.following);
     document.getElementById('pm-stat-followers').textContent = d.stats.followers;
     document.getElementById('pm-stat-following').textContent = d.stats.following;
+    renderProfilePeople('pm-followers-list', d.followers, d.stats.followers);
+    renderProfilePeople('pm-following-list', d.following_users, d.stats.following);
 
     // Avatar
     const avEl=document.getElementById('pm-avatar-el');
@@ -1111,6 +1134,16 @@ async function openProfile(username) {
         </div>`).join('');
     }
   } catch(e) { toast('Could not load profile', true); closeProfile(); }
+}
+
+function renderProfilePeople(elementId, users = [], total = users.length) {
+  const list = document.getElementById(elementId);
+  list.innerHTML = users.length ? users.map(user => `
+    <button class="pm-person" onclick="openProfile(this.dataset.username)" data-username="${esc(user.username)}">
+      <span class="pm-person-avatar">${user.avatar_url ? `<img src="${esc(user.avatar_url)}" alt="" loading="lazy"/>` : esc(user.avatar || '🎧')}</span>
+      <span>${esc(user.username)}</span>
+    </button>`).join('') : '<div class="pm-connection-empty">No users yet.</div>';
+  if (total > users.length) list.insertAdjacentHTML('beforeend', `<div class="pm-connection-empty">Showing the latest ${users.length} of ${total}.</div>`);
 }
 
 function closeProfile() {

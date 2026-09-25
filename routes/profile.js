@@ -62,16 +62,28 @@ router.get('/:username', optionalAuth, async (req, res) => {
     const likes = await Post.aggregate([{ $match: { user_id: user._id } }, { $group: { _id: null, total: { $sum: '$like_count' } } }]);
     const likesReceived = likes[0]?.total || 0;
 
-    const [followers, following, isFollowing, postCount] = await Promise.all([
+    const [followers, following, isFollowing, postCount, followerRows, followingRows] = await Promise.all([
       Follow.countDocuments({ following_id: user._id }),
       Follow.countDocuments({ follower_id: user._id }),
       req.user ? Follow.exists({ follower_id: req.user.id, following_id: user._id }) : false,
       Post.countDocuments({ user_id: user._id }),
+      Follow.find({ following_id: user._id })
+        .populate('follower_id', 'username avatar avatar_url role')
+        .sort({ created_at: -1 })
+        .limit(50)
+        .lean(),
+      Follow.find({ follower_id: user._id })
+        .populate('following_id', 'username avatar avatar_url role')
+        .sort({ created_at: -1 })
+        .limit(50)
+        .lean(),
     ]);
     res.json({
       following: !!isFollowing,
       user:  serializeUser(user),
       stats: { posts: postCount, likes_received: likesReceived, followers, following },
+      followers: followerRows.map(row => row.follower_id && serializeUser(row.follower_id)).filter(Boolean),
+      following_users: followingRows.map(row => row.following_id && serializeUser(row.following_id)).filter(Boolean),
       posts: userPosts.map(serializePost),
     });
   } catch (err) {

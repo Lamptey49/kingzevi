@@ -79,6 +79,7 @@ for (const page of ['index', 'social']) {
     assert.equal(calls, 1);
     assert.equal(document.querySelectorAll('.post-card').length, 1);
     assert.equal(document.querySelector('#post-one img').src, post('one').avatar_url);
+    if (page === 'index') assert.equal(document.querySelector('.post-author-link').href, 'http://localhost/social.html?profile=Fan');
     const button = document.getElementById(page === 'index' ? 'load-more' : 'load-more-btn');
     assert.equal(button.style.display, 'none');
     await dom.window.loadMorePosts();

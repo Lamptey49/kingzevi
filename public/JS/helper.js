@@ -508,7 +508,7 @@ function buildPostEl(post) {
       <div class="post-avatar">${avatarMarkup(post)}</div>
       <div class="post-meta">
         <div class="post-author">
-          ${esc(post.username)}
+          <a class="post-author-link" href="/social.html?profile=${encodeURIComponent(post.username)}">${esc(post.username)}</a>
           <span class="post-role-tag ${post.role==='artist'?'artist':''}">${post.role}</span>
         </div>
         <div class="post-time">${relTime(post.created_at)}</div>

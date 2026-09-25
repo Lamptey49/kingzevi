@@ -74,6 +74,10 @@ test('MongoDB feed pagination, profile pictures and indexed music counts', async
   assert.equal(await Follow.countDocuments({ follower_id: other.id }), 1);
   const publicProfile = await request('GET', '/profile/fan');
   assert.equal(publicProfile.following, true); assert.equal(publicProfile.stats.followers, 1);
+  assert.deepEqual(publicProfile.followers.map(person => person.username), ['listener']);
+  await request('PUT', '/social/users/' + other.id + '/follow', token);
+  const updatedProfile = await request('GET', '/profile/fan');
+  assert.deepEqual(updatedProfile.following_users.map(person => person.username), ['listener']);
   assert.equal((await request('GET', '/social/posts?feed=following')).posts.length, 6);
   assert.equal((await request('GET', '/social/posts?feed=following', null)).status, 401);
   await request('DELETE', '/social/users/' + user.id + '/follow');
